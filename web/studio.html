@@ -1,0 +1,668 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CHIP-8 Studio</title>
+<style>
+:root {
+  --bg: #0b0e13;
+  --panel: #131820;
+  --panel-2: #0e131a;
+  --line: #232c39;
+  --ink: #c8d3e0;
+  --dim: #6b7a8d;
+  --accent: #7fd6a6;
+  --warn: #e8a33d;
+  --bad: #e2604f;
+  --phos: #7fd6a6;
+  --mono: ui-monospace, "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+}
+:root[data-phos="amber"] { --phos: #ffb638; }
+:root[data-phos="ice"]   { --phos: #6fc3ff; }
+:root[data-phos="paper"] { --phos: #e8ecf1; }
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 13px/1.5 var(--mono);
+  -webkit-font-smoothing: antialiased;
+}
+button, select, input, textarea { font: inherit; color: inherit; }
+
+header {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel-2);
+}
+header h1 {
+  margin: 0; font-size: 14px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--phos); font-weight: 600;
+}
+header h1 span { color: var(--dim); }
+.spacer { flex: 1; }
+
+button {
+  background: var(--panel); border: 1px solid var(--line); color: var(--ink);
+  padding: 5px 11px; border-radius: 5px; cursor: pointer; transition: .12s;
+}
+button:hover:not(:disabled) { border-color: var(--phos); color: var(--phos); }
+button:disabled { opacity: .35; cursor: default; }
+button.primary { border-color: var(--phos); color: var(--phos); }
+button.primary:hover { background: color-mix(in srgb, var(--phos) 14%, transparent); }
+select, input[type=text] {
+  background: var(--panel); border: 1px solid var(--line); color: var(--ink);
+  padding: 5px 8px; border-radius: 5px;
+}
+
+main {
+  display: grid; gap: 1px; background: var(--line);
+  grid-template-columns: minmax(300px, 1fr) minmax(660px, auto) minmax(320px, 1fr);
+  align-items: stretch; min-height: calc(100vh - 49px);
+}
+main > section { background: var(--bg); display: flex; flex-direction: column; min-width: 0; }
+
+.pane { border-bottom: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.pane > h2 {
+  margin: 0; padding: 7px 12px; font-size: 10px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--dim); font-weight: 600; background: var(--panel-2);
+  display: flex; align-items: center; gap: 8px;
+}
+.pane > h2 .spacer { flex: 1; }
+.pane > h2 button { padding: 1px 7px; font-size: 11px; }
+.body { padding: 10px 12px; overflow: auto; }
+
+/* ---------------------------------------------------------------- screen */
+.stage { padding: 18px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.crt {
+  position: relative; padding: 14px; border-radius: 10px;
+  background: #05070a; border: 1px solid var(--line);
+  box-shadow: inset 0 0 60px rgba(0,0,0,.9);
+  /* Full-width box with a centred screen, so the canvas can shrink on narrow
+     viewports instead of collapsing against a shrink-to-fit parent. */
+  width: 100%; max-width: 668px; display: flex; justify-content: center;
+}
+canvas {
+  display: block; width: 100%; max-width: 640px; height: auto; aspect-ratio: 2 / 1;
+  image-rendering: pixelated; border-radius: 3px;
+}
+.crt::after {
+  content: ""; position: absolute; inset: 14px; pointer-events: none; border-radius: 3px;
+  max-width: 640px; margin: 0 auto;
+  background: repeating-linear-gradient(to bottom, rgba(0,0,0,.28) 0 1px, transparent 1px 3px);
+  opacity: var(--scan, .5);
+}
+.transport { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; justify-content: center; }
+.transport .sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
+label.slider { display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 11px; }
+input[type=range] { accent-color: var(--phos); width: 130px; }
+
+.keypad { display: grid; grid-template-columns: repeat(4, 46px); gap: 5px; }
+.keypad button {
+  height: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1px; padding: 0; line-height: 1;
+}
+.keypad button b { font-size: 14px; font-weight: 600; }
+.keypad button i { font-size: 9px; font-style: normal; color: var(--dim); }
+.keypad button.down { background: var(--phos); color: #06090d; border-color: var(--phos); }
+.keypad button.down i { color: #06090d; opacity: .7; }
+
+/* ---------------------------------------------------------------- editor */
+.editor-wrap { display: flex; flex: 1; min-height: 260px; background: var(--panel-2); }
+.gutter {
+  padding: 10px 8px 10px 12px; text-align: right; color: #3d4a5c; user-select: none;
+  white-space: pre; overflow: hidden; font-size: 12px; line-height: 1.55;
+}
+.gutter b { color: var(--bad); font-weight: 400; }
+textarea#src {
+  flex: 1; background: transparent; border: 0; resize: none; outline: none;
+  padding: 10px 12px 10px 0; line-height: 1.55; font-size: 12px; white-space: pre; overflow: auto;
+  tab-size: 4;
+}
+#status {
+  padding: 7px 12px; font-size: 11px; border-top: 1px solid var(--line);
+  background: var(--panel-2); color: var(--dim); white-space: pre-wrap;
+}
+#status.ok { color: var(--accent); }
+#status.err { color: var(--bad); }
+
+/* ---------------------------------------------------------------- state */
+.regs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.reg {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
+  padding: 3px 6px; display: flex; justify-content: space-between; gap: 6px; font-size: 11px;
+}
+.reg span { color: var(--dim); }
+.reg.hot { border-color: var(--phos); }
+.reg.hot b { color: var(--phos); }
+.reg b { font-weight: 600; }
+
+.cpu { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 8px; }
+.flags { margin-top: 8px; font-size: 11px; color: var(--dim); }
+.flags em { font-style: normal; color: var(--warn); }
+
+#stack { font-size: 11px; color: var(--dim); margin-top: 8px; word-break: break-all; }
+
+/* ---------------------------------------------------------------- disasm */
+#disasm { font-size: 12px; line-height: 1.45; }
+#disasm .row { display: flex; gap: 8px; padding: 0 4px; border-radius: 3px; cursor: pointer; white-space: pre; }
+#disasm .row:hover { background: var(--panel); }
+#disasm .row.pc { background: color-mix(in srgb, var(--phos) 18%, transparent); }
+#disasm .row.pc .txt { color: var(--phos); }
+#disasm .a { color: #4d5b6e; width: 3.5em; }
+#disasm .b { color: #556478; width: 4.5em; }
+#disasm .txt { color: var(--ink); }
+#disasm .lbl { color: var(--warn); }
+#disasm .bp { width: 1em; color: var(--bad); }
+
+#mem { font-size: 11.5px; line-height: 1.5; white-space: pre; color: var(--dim); }
+#mem .a { color: #4d5b6e; }
+#mem u { text-decoration: none; color: var(--phos); }
+#mem s { text-decoration: none; color: var(--warn); }
+
+.quirks { display: grid; gap: 4px; font-size: 11.5px; }
+.quirks label { display: flex; gap: 7px; align-items: flex-start; cursor: pointer; }
+.quirks input { accent-color: var(--phos); margin: 3px 0 0; }
+.quirks small { color: var(--dim); display: block; }
+
+@media (max-width: 1400px) {
+  main { grid-template-columns: 1fr; }
+  main > section { min-height: 0; }
+}
+</style>
+
+<header>
+  <h1>CHIP&#8209;8 <span>Studio</span></h1>
+  <select id="romPick" title="Wybierz program"></select>
+  <button id="btnAsm" class="primary">Asembluj &amp; uruchom <small style="color:var(--dim)">Ctrl+&crarr;</small></button>
+  <div class="spacer"></div>
+  <label class="slider">luminofor
+    <select id="phos">
+      <option value="green">zielony</option>
+      <option value="amber">bursztyn</option>
+      <option value="ice">lod</option>
+      <option value="paper">biel</option>
+    </select>
+  </label>
+  <button id="btnExport">Pobierz .ch8</button>
+</header>
+
+<main>
+  <!-- ------------------------------------------------------------ EDYTOR -->
+  <section>
+    <div class="pane" style="flex:1">
+      <h2>Zrodlo <span class="spacer"></span><span id="srcInfo"></span></h2>
+      <div class="editor-wrap">
+        <div class="gutter" id="gutter"></div>
+        <textarea id="src" spellcheck="false" autocomplete="off"></textarea>
+      </div>
+      <div id="status">Gotowy.</div>
+    </div>
+    <div class="pane">
+      <h2>Quirki interpretera</h2>
+      <div class="body">
+        <div style="display:flex;gap:6px;margin-bottom:10px">
+          <button data-profile="vip">COSMAC VIP</button>
+          <button data-profile="modern">Nowoczesny</button>
+        </div>
+        <div class="quirks" id="quirks"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------- EKRAN -->
+  <section>
+    <div class="stage">
+      <div class="crt"><canvas id="screen" width="64" height="32"></canvas></div>
+
+      <div class="transport">
+        <button id="btnRun" class="primary">&#9654; Uruchom</button>
+        <button id="btnStep">&#8677; Krok</button>
+        <button id="btnBack">&#8676; Cofnij</button>
+        <button id="btnFrame">Klatka</button>
+        <button id="btnReset">&#8635; Reset</button>
+        <div class="sep"></div>
+        <label class="slider">tempo
+          <input type="range" id="speed" min="1" max="60" value="12">
+          <b id="speedVal" style="color:var(--ink);width:5.5em">12 op/kl</b>
+        </label>
+        <div class="sep"></div>
+        <label class="slider"><input type="checkbox" id="glow" checked> poswiata</label>
+        <label class="slider"><input type="checkbox" id="snd" checked> dzwiek</label>
+      </div>
+
+      <div class="keypad" id="keypad"></div>
+      <div style="color:var(--dim);font-size:11px;text-align:center;max-width:520px">
+        Klawiatura fizyczna: <b style="color:var(--ink)">1234 / QWER / ASDF / ZXCV</b>.
+        W wazu i odbijaku steruj <b style="color:var(--ink)">2 4 6 8</b> (W A D X na klawiaturze).
+      </div>
+    </div>
+  </section>
+
+  <!-- --------------------------------------------------------- DEBUGGER -->
+  <section>
+    <div class="pane">
+      <h2>Rejestry</h2>
+      <div class="body">
+        <div class="regs" id="regs"></div>
+        <div class="cpu" id="cpu"></div>
+        <div class="flags" id="flags"></div>
+        <div id="stack"></div>
+      </div>
+    </div>
+
+    <div class="pane" style="flex:1.4">
+      <h2>Deasembler <span class="spacer"></span>
+        <span style="color:var(--dim);font-weight:400;text-transform:none;letter-spacing:0">klik = pulapka</span>
+      </h2>
+      <div class="body" id="disasm"></div>
+    </div>
+
+    <div class="pane" style="flex:1">
+      <h2>Pamiec <span class="spacer"></span>
+        <input type="text" id="memGo" placeholder="0x200" size="6" style="padding:1px 6px">
+        <button id="memPC">PC</button><button id="memI">I</button>
+      </h2>
+      <div class="body" id="mem"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+/*__CORE__*/
+/*__ROMS__*/
+
+// ===========================================================================
+//  UI
+// ===========================================================================
+const $ = (id) => document.getElementById(id);
+const QUIRK_INFO = [
+  ['vfReset',     'VF zerowane przy OR/AND/XOR', '8XY1/2/3 kasuja VF - tak robil oryginalny interpreter.'],
+  ['memoryI',     'FX55/FX65 zwiekszaja I',      'Po zapisie/odczycie rejestrow I wskazuje za ostatni bajt.'],
+  ['displayWait', 'DXYN czeka na klatke',        'Rysowanie synchronizuje sie z 60 Hz. Stad slynne miganie.'],
+  ['clipping',    'Sprite przycinany na brzegu', 'Wylaczone = sprite zawija sie na druga strone ekranu.'],
+  ['shiftVy',     'SHR/SHL przesuwaja VY',       'Wylaczone = przesuwaja VX w miejscu (wariant SUPER-CHIP).'],
+  ['jumpVx',      'BNNN skacze z VX',            'Wlaczone = BXNN z SUPER-CHIP zamiast klasycznego JP V0.'],
+];
+const PROFILES = {
+  vip:    { vfReset: true,  memoryI: true,  displayWait: true,  clipping: true,  shiftVy: true,  jumpVx: false },
+  modern: { vfReset: false, memoryI: false, displayWait: false, clipping: true,  shiftVy: false, jumpVx: false },
+};
+const KEYMAP = {
+  Digit1: 0x1, Digit2: 0x2, Digit3: 0x3, Digit4: 0xc,
+  KeyQ: 0x4, KeyW: 0x5, KeyE: 0x6, KeyR: 0xd,
+  KeyA: 0x7, KeyS: 0x8, KeyD: 0x9, KeyF: 0xe,
+  KeyZ: 0xa, KeyX: 0x0, KeyC: 0xb, KeyV: 0xf,
+};
+const PAD = [
+  [0x1, '1'], [0x2, '2'], [0x3, '3'], [0xc, '4'],
+  [0x4, 'Q'], [0x5, 'W'], [0x6, 'E'], [0xd, 'R'],
+  [0x7, 'A'], [0x8, 'S'], [0x9, 'D'], [0xe, 'F'],
+  [0xa, 'Z'], [0x0, 'X'], [0xb, 'C'], [0xf, 'V'],
+];
+
+const cpu = new Chip8({ historyLimit: 4096, seed: (Math.random() * 0xffffffff) >>> 0 });
+let running = false;
+let program = null;          // { bytes, start, symbols, lineMap }
+let labelAt = new Map();     // address -> label
+let breakpoints = new Set();
+let memBase = 0x200;
+let uiDirty = true;
+let skipBreak = false;
+
+// ---------------------------------------------------------------- rendering
+const cv = $('screen');
+const ctx = cv.getContext('2d', { alpha: false });
+const img = ctx.createImageData(SCREEN_W, SCREEN_H);
+const glowBuf = new Float32Array(SCREEN_W * SCREEN_H);
+
+function phosColor() {
+  const probe = getComputedStyle(document.documentElement).getPropertyValue('--phos').trim();
+  const d = document.createElement('canvas').getContext('2d');
+  d.fillStyle = probe; d.fillRect(0, 0, 1, 1);
+  return d.getImageData(0, 0, 1, 1).data;
+}
+let RGB = phosColor();
+
+function paint() {
+  const decay = $('glow').checked ? 0.55 : 0;
+  const px = img.data;
+  for (let i = 0; i < glowBuf.length; i++) {
+    const lit = cpu.display[i];
+    glowBuf[i] = lit ? 1 : glowBuf[i] * decay;
+    const a = glowBuf[i];
+    px[i * 4 + 0] = 8 + RGB[0] * a;
+    px[i * 4 + 1] = 10 + RGB[1] * a;
+    px[i * 4 + 2] = 14 + RGB[2] * a;
+    px[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+// ------------------------------------------------------------------- audio
+let audio = null, osc = null, gain = null;
+function initAudio() {
+  if (audio) return;
+  audio = new (window.AudioContext || window.webkitAudioContext)();
+  osc = audio.createOscillator();
+  gain = audio.createGain();
+  osc.type = 'square';
+  osc.frequency.value = 440;
+  gain.gain.value = 0;
+  osc.connect(gain).connect(audio.destination);
+  osc.start();
+}
+function updateAudio() {
+  if (!gain) return;
+  // Only sound while a clock is actually running. A paused debugger has no
+  // 60 Hz tick to drain ST, so without this a breakpoint mid-beep would hold
+  // the tone forever.
+  const clocked = running || cpu.halted;
+  const want = clocked && cpu.st > 0 && $('snd').checked ? 0.045 : 0;
+  gain.gain.setTargetAtTime(want, audio.currentTime, 0.008);
+}
+
+// -------------------------------------------------------------- main loop
+function frame() {
+  requestAnimationFrame(frame);
+  if (running) {
+    cpu.tick60();
+    const ipf = +$('speed').value;
+    for (let k = 0; k < ipf; k++) {
+      if (cpu.halted) { setRunning(false); say(`Program zatrzymany: ${cpu.haltReason || 'stop'}.`, 'ok'); break; }
+      if (breakpoints.has(cpu.pc) && !skipBreak) {
+        setRunning(false);
+        say(`Pulapka na 0x${hex(cpu.pc, 3)}. Wcisnij Uruchom, zeby isc dalej.`, 'ok');
+        break;
+      }
+      skipBreak = false;
+      try { cpu.step(); }
+      catch (err) { setRunning(false); say(`${err.message} (PC 0x${hex(err.pc ?? cpu.pc, 3)})`, 'err'); break; }
+    }
+    uiDirty = true;
+  } else if (cpu.halted && (cpu.dt > 0 || cpu.st > 0)) {
+    // A halted program is still a running machine: let its timers wind down so
+    // a closing beep ends on its own.
+    cpu.tick60();
+    uiDirty = true;
+  }
+  paint();
+  updateAudio();
+  if (uiDirty) { renderState(); uiDirty = false; }
+}
+
+function setRunning(on) {
+  running = on;
+  if (on) skipBreak = true; // don't re-trigger the breakpoint we're parked on
+  $('btnRun').innerHTML = on ? '&#10073;&#10073; Pauza' : '&#9654; Uruchom';
+  $('btnStep').disabled = on;
+  $('btnBack').disabled = on;
+  $('btnFrame').disabled = on;
+  if (on) initAudio();
+}
+
+// ------------------------------------------------------------ state panels
+function renderState() {
+  const regs = $('regs');
+  if (!regs.children.length) {
+    for (let r = 0; r < 16; r++) {
+      const el = document.createElement('div');
+      el.className = 'reg';
+      el.innerHTML = `<span>V${hex(r, 1)}</span><b>00</b>`;
+      regs.append(el);
+    }
+    for (const name of ['PC', 'I', 'SP', 'DT', 'ST', 'cykle']) {
+      const el = document.createElement('div');
+      el.className = 'reg';
+      el.innerHTML = `<span>${name}</span><b>-</b>`;
+      $('cpu').append(el);
+    }
+  }
+  for (let r = 0; r < 16; r++) {
+    const el = regs.children[r];
+    const val = hex(cpu.v[r]);
+    if (el.lastChild.textContent !== val) {
+      el.lastChild.textContent = val;
+      el.classList.add('hot');
+      setTimeout(() => el.classList.remove('hot'), 260);
+    }
+  }
+  const cells = $('cpu').children;
+  cells[0].lastChild.textContent = hex(cpu.pc, 3);
+  cells[1].lastChild.textContent = hex(cpu.i, 3);
+  cells[2].lastChild.textContent = String(cpu.sp);
+  cells[3].lastChild.textContent = hex(cpu.dt);
+  cells[4].lastChild.textContent = hex(cpu.st);
+  cells[5].lastChild.textContent = cpu.cycles.toLocaleString('pl-PL');
+
+  const notes = [];
+  if (cpu.halted) notes.push('<em>zatrzymany</em>');
+  if (cpu.waitingKey) notes.push('<em>czeka na klawisz (FX0A)</em>');
+  if (cpu.st > 0) notes.push('<em>brzeczyk</em>');
+  if (cpu.fontClobbered) notes.push('<em>program nadpisal czcionke</em>');
+  notes.push(`historia: ${cpu.history.length}`);
+  $('flags').innerHTML = notes.join(' &middot; ');
+
+  $('stack').textContent = 'Stos: ' + (cpu.sp === 0 ? '(pusty)'
+    : Array.from(cpu.stack.slice(0, cpu.sp)).map((a) => hex(a, 3)).join(' > '));
+
+  renderDisasm();
+  renderMem();
+}
+
+function renderDisasm() {
+  const rows = [];
+  const start = Math.max(0x200, cpu.pc - 12) & ~1;
+  for (let addr = start; addr < start + 44 && addr < 0xffe; addr += 2) {
+    const op = (cpu.mem[addr] << 8) | cpu.mem[addr + 1];
+    const text = disassemble(op);
+    const lbl = labelAt.get(addr);
+    rows.push(
+      `<div class="row${addr === cpu.pc ? ' pc' : ''}" data-a="${addr}">` +
+      `<span class="bp">${breakpoints.has(addr) ? '&#9679;' : ' '}</span>` +
+      `<span class="a">${hex(addr, 3)}</span><span class="b">${hex(op, 4)}</span>` +
+      `<span class="txt">${text ? esc(text) : '<span style="color:#4d5b6e">.dane</span>'}</span>` +
+      (lbl ? `<span class="lbl">; ${esc(lbl)}</span>` : '') +
+      `</div>`
+    );
+  }
+  $('disasm').innerHTML = rows.join('');
+}
+
+function renderMem() {
+  const lines = [];
+  for (let row = 0; row < 12; row++) {
+    const base = (memBase + row * 16) & 0xff0;
+    let out = `<span class="a">${hex(base, 3)}</span>  `;
+    let ascii = '';
+    for (let c = 0; c < 16; c++) {
+      const a = base + c;
+      const b = cpu.mem[a];
+      const t = hex(b);
+      out += a === cpu.pc || a === cpu.pc + 1 ? `<u>${t}</u> ` : a === cpu.i ? `<s>${t}</s> ` : `${t} `;
+      ascii += b >= 32 && b < 127 ? String.fromCharCode(b) : '.';
+    }
+    lines.push(out + ' ' + esc(ascii));
+  }
+  $('mem').innerHTML = lines.join('\n');
+}
+
+const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+function say(msg, kind = '') { const s = $('status'); s.textContent = msg; s.className = kind; }
+
+// -------------------------------------------------------------- assembling
+function buildAndLoad(autorun = true) {
+  const source = $('src').value;
+  markErrorLine(null);
+  let result;
+  try {
+    result = assemble(source);
+  } catch (err) {
+    markErrorLine(err.line ?? null);
+    say(err.message, 'err');
+    setRunning(false);
+    return false;
+  }
+  program = result;
+  labelAt = new Map();
+  for (const [name, addr] of Object.entries(result.symbols)) {
+    if (addr >= 0x200 && !labelAt.has(addr)) labelAt.set(addr, name);
+  }
+  cpu.quirks = readQuirks();
+  cpu.load(result.bytes, result.start);
+  glowBuf.fill(0);
+  memBase = result.start;
+  const used = Object.keys(result.symbols).length;
+  say(`OK - ${result.bytes.length} B od 0x${hex(result.start, 3)}, ${used} symboli.`, 'ok');
+  $('srcInfo').textContent = `${result.bytes.length} B`;
+  setRunning(autorun);
+  uiDirty = true;
+  return true;
+}
+
+function markErrorLine(line) {
+  const total = $('src').value.split('\n').length;
+  const out = [];
+  for (let n = 1; n <= total; n++) out.push(n === line ? `<b>${n}</b>` : String(n));
+  $('gutter').innerHTML = out.join('\n');
+}
+
+function readQuirks() {
+  const q = {};
+  for (const [key] of QUIRK_INFO) q[key] = $('q_' + key).checked;
+  return q;
+}
+
+// ------------------------------------------------------------------- setup
+function boot() {
+  // Browsers restore <select> values across reloads, so pin the phosphor
+  // explicitly instead of inheriting whatever was picked last time.
+  $('phos').value = 'amber';
+  document.documentElement.dataset.phos = 'amber';
+  RGB = phosColor();
+
+  // quirk checkboxes
+  $('quirks').innerHTML = QUIRK_INFO.map(([key, title, desc]) =>
+    `<label><input type="checkbox" id="q_${key}"><span>${title}<small>${desc}</small></span></label>`
+  ).join('');
+  applyProfile('vip');
+  for (const [key] of QUIRK_INFO) {
+    $('q_' + key).addEventListener('change', () => { cpu.quirks = readQuirks(); uiDirty = true; });
+  }
+  for (const btn of document.querySelectorAll('[data-profile]')) {
+    btn.addEventListener('click', () => { applyProfile(btn.dataset.profile); cpu.quirks = readQuirks(); });
+  }
+
+  // keypad
+  $('keypad').innerHTML = PAD.map(([k, phys]) =>
+    `<button data-k="${k}"><b>${hex(k, 1)}</b><i>${phys}</i></button>`
+  ).join('');
+  for (const btn of $('keypad').children) {
+    const k = +btn.dataset.k;
+    const down = (e) => { e.preventDefault(); initAudio(); cpu.keyDown(k); btn.classList.add('down'); };
+    const up = () => { cpu.keyUp(k); btn.classList.remove('down'); };
+    btn.addEventListener('pointerdown', down);
+    btn.addEventListener('pointerup', up);
+    btn.addEventListener('pointerleave', up);
+  }
+  addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); buildAndLoad(); return; }
+    const k = KEYMAP[e.code];
+    if (k === undefined || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+    e.preventDefault();
+    initAudio();
+    cpu.keyDown(k);
+    $('keypad').querySelector(`[data-k="${k}"]`)?.classList.add('down');
+  });
+  addEventListener('keyup', (e) => {
+    const k = KEYMAP[e.code];
+    if (k === undefined) return;
+    cpu.keyUp(k);
+    $('keypad').querySelector(`[data-k="${k}"]`)?.classList.remove('down');
+  });
+
+  // rom picker
+  $('romPick').innerHTML = Object.entries(ROMS)
+    .map(([id, r]) => `<option value="${id}">${r.title}</option>`).join('');
+  $('romPick').addEventListener('change', () => loadRom($('romPick').value));
+
+  // transport
+  $('btnAsm').addEventListener('click', () => buildAndLoad());
+  $('btnRun').addEventListener('click', () => {
+    if (!program) return void buildAndLoad();
+    if (cpu.halted) return say('Program dobiegl konca - wcisnij Reset albo Cofnij.', 'err');
+    setRunning(!running);
+  });
+  $('btnStep').addEventListener('click', () => { safeStep(); uiDirty = true; });
+  $('btnFrame').addEventListener('click', () => {
+    cpu.tick60();
+    for (let k = 0; k < +$('speed').value; k++) if (!safeStep()) break;
+    uiDirty = true;
+  });
+  $('btnBack').addEventListener('click', () => {
+    if (!cpu.stepBack()) say('Historia jest pusta.', 'err');
+    else say(`Cofnieto do 0x${hex(cpu.pc, 3)}.`);
+    uiDirty = true;
+  });
+  $('btnReset').addEventListener('click', () => {
+    cpu.reset((Math.random() * 0xffffffff) >>> 0);
+    glowBuf.fill(0); setRunning(false); say('Reset.'); uiDirty = true;
+  });
+  $('speed').addEventListener('input', () => { $('speedVal').textContent = $('speed').value + ' op/kl'; });
+  $('phos').addEventListener('change', () => {
+    document.documentElement.dataset.phos = $('phos').value;
+    RGB = phosColor();
+  });
+  $('btnExport').addEventListener('click', exportRom);
+
+  // debugger interactions
+  $('disasm').addEventListener('click', (e) => {
+    const row = e.target.closest('.row');
+    if (!row) return;
+    const a = +row.dataset.a;
+    breakpoints.has(a) ? breakpoints.delete(a) : breakpoints.add(a);
+    uiDirty = true;
+  });
+  $('memGo').addEventListener('change', () => {
+    const v = parseInt($('memGo').value.replace(/^0x/i, ''), 16);
+    if (!Number.isNaN(v)) { memBase = v & 0xff0; uiDirty = true; }
+  });
+  $('memPC').addEventListener('click', () => { memBase = cpu.pc & 0xff0; uiDirty = true; });
+  $('memI').addEventListener('click', () => { memBase = cpu.i & 0xff0; uiDirty = true; });
+
+  $('src').addEventListener('input', () => { markErrorLine(null); $('srcInfo').textContent = 'niezapisane'; });
+  $('src').addEventListener('scroll', () => { $('gutter').scrollTop = $('src').scrollTop; });
+
+  loadRom(Object.keys(ROMS)[0]);
+  requestAnimationFrame(frame);
+}
+
+function safeStep() {
+  try { cpu.step(); return true; }
+  catch (err) { say(`${err.message} (PC 0x${hex(err.pc ?? cpu.pc, 3)})`, 'err'); return false; }
+}
+
+function applyProfile(name) {
+  for (const [key, on] of Object.entries(PROFILES[name])) $('q_' + key).checked = on;
+}
+
+function loadRom(id) {
+  const rom = ROMS[id];
+  if (!rom) return;
+  $('src').value = rom.source;
+  $('romPick').value = id;
+  breakpoints.clear();
+  buildAndLoad(false);
+  say(`Wczytano "${rom.title}". ${rom.hint || ''}`);
+}
+
+function exportRom() {
+  if (!program) { say('Najpierw zasembluj program.', 'err'); return; }
+  const blob = new Blob([program.bytes], { type: 'application/octet-stream' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = ($('romPick').selectedOptions[0]?.textContent || 'program')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-') + '.ch8';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  say(`Zapisano ${program.bytes.length} B jako ${a.download} - dziala w kazdym emulatorze CHIP-8.`, 'ok');
+}
+
+boot();
+</script>

@@ -1,0 +1,286 @@
+; ============================================================
+;  WAZ  (snake)
+;
+;  Plansza: 16 x 8 komorek po 4 x 4 piksele.
+;  Komorka pakowana w jeden bajt:  (kolumna << 4) | wiersz
+;  Cialo weza to bufor cykliczny 64 bajtow pod adresem BODY.
+;
+;  Sterowanie:  2 = gora   8 = dol   4 = lewo   6 = prawo
+;
+;  Rejestry:
+;    V0, V1 - pomocnicze          V8 - licznik petli skanujacej
+;    V2 - kolumna glowy           V9 - spakowana komorka
+;    V3 - wiersz glowy            VA - wynik
+;    V4 - kierunek (0..3)         VB - blokada skretu / flaga wzrostu
+;    V5 - indeks glowy w buforze  VC - wynik skanowania
+;    V6 - indeks ogona            VD, VE - wspolrzedne w pikselach
+;    V7 - spakowana pozycja jedzenia
+; ============================================================
+
+define BODY   0x400         ; bufor cykliczny 64 bajtow
+define RING   63            ; maska bufora
+define SPEED  3             ; opoznienie miedzy krokami (klatki)
+define MAXLEN 39            ; powyzej tego waz przestaje rosnac
+
+; ---------------------------------------------------------------- start gry
+main:
+    CLS
+    LD  V4, 1               ; kierunek startowy: w prawo
+    LD  VA, 0               ; wynik
+    LD  V5, 0               ; indeks glowy
+    LD  V6, 0               ; indeks ogona
+    LD  V3, 4               ; wiersz
+    LD  V2, 2               ; kolumna - waz startuje jako trzy komorki
+
+initbody:
+    CALL pack
+    LD  I, BODY
+    ADD I, V5
+    LD  V0, V9
+    LD  [I], V0
+    CALL drawbody
+    SE  V2, 4
+    JP  initstep
+    JP  initdone
+initstep:
+    ADD V5, 1
+    ADD V2, 1
+    JP  initbody
+initdone:
+    CALL newfood
+
+; ---------------------------------------------------------------- petla gry
+loop:
+    ; --- przesun glowe zgodnie z kierunkiem
+    SNE V4, 0
+    ADD V3, -1              ; gora
+    SNE V4, 1
+    ADD V2, 1               ; prawo
+    SNE V4, 2
+    ADD V3, 1               ; dol
+    SNE V4, 3
+    ADD V2, -1              ; lewo
+
+    ; --- sciana?  (po odjeciu 1 od zera zostaje 255, wiec SUB zlapie oba przypadki)
+    LD  V0, 15
+    SUB V0, V2
+    SE  VF, 1
+    JP  dead
+    LD  V0, 7
+    SUB V0, V3
+    SE  VF, 1
+    JP  dead
+
+    ; --- wlasny ogon?
+    CALL pack
+    CALL occupied
+    SE  VC, 0
+    JP  dead
+
+    ; --- jedzenie?
+    LD  VB, 0
+    SNE V9, V7
+    CALL eat
+
+    ; --- dopisz nowa glowe do bufora i narysuj ja
+    ADD V5, 1
+    LD  V0, RING
+    AND V5, V0
+    LD  I, BODY
+    ADD I, V5
+    LD  V0, V9
+    LD  [I], V0
+    CALL drawbody
+
+    ; --- jesli nie rosniemy, zdejmij ogon
+    SE  VB, 0
+    JP  skiptail
+    LD  I, BODY
+    ADD I, V6
+    LD  V0, [I]
+    CALL drawbody           ; ten sam sprite w to samo miejsce = wymazanie
+    ADD V6, 1
+    LD  V0, RING
+    AND V6, V0
+skiptail:
+
+    ; --- nowe jedzenie dopiero po zdjeciu ogona, zeby nie trafilo na zajete pole
+    SE  VB, 1
+    JP  nofood
+    CALL newfood
+nofood:
+
+    ; --- pauza; w tym czasie nasluchujemy klawiszy
+    LD  VB, 0               ; jeden skret na krok
+    LD  V0, SPEED
+    LD  DT, V0
+wait:
+    CALL input
+    LD  V0, DT
+    SE  V0, 0
+    JP  wait
+    JP  loop
+
+; ---------------------------------------------------------------- jedzenie
+eat:
+    LD  VB, 1
+    LD  V0, V7
+    CALL drawfood           ; wymaz zjedzone
+    ADD VA, 1
+    LD  V0, 4
+    LD  ST, V0
+    LD  V0, MAXLEN
+    SUB V0, VA
+    SE  VF, 1
+    LD  VB, 0               ; osiagnieta maksymalna dlugosc - rosnij dalej wynikiem
+    RET
+
+newfood:
+    RND V9, 0xF7            ; kolumna 0-15 w gornym nibblu, wiersz 0-7 w dolnym
+    CALL occupied
+    SE  VC, 0
+    JP  newfood
+    LD  V7, V9
+    LD  V0, V7
+    CALL drawfood
+    RET
+
+; ---------------------------------------------------------------- sterowanie
+input:
+    SE  VB, 0               ; juz skrecalismy w tym kroku?
+    RET
+    LD  V0, 2
+    SKNP V0
+    JP  turnup
+    LD  V0, 8
+    SKNP V0
+    JP  turndown
+    LD  V0, 4
+    SKNP V0
+    JP  turnleft
+    LD  V0, 6
+    SKNP V0
+    JP  turnright
+    RET
+
+turnup:
+    SNE V4, 2               ; zawrot o 180 stopni jest ignorowany
+    RET
+    LD  V4, 0
+    LD  VB, 1
+    RET
+turnright:
+    SNE V4, 3
+    RET
+    LD  V4, 1
+    LD  VB, 1
+    RET
+turndown:
+    SNE V4, 0
+    RET
+    LD  V4, 2
+    LD  VB, 1
+    RET
+turnleft:
+    SNE V4, 1
+    RET
+    LD  V4, 3
+    LD  VB, 1
+    RET
+
+; ---------------------------------------------------------------- narzedzia
+; V2, V3  ->  V9 = (kolumna << 4) | wiersz
+pack:
+    LD  V9, V2
+    SHL V9
+    SHL V9
+    SHL V9
+    SHL V9
+    OR  V9, V3
+    RET
+
+; V0 = spakowana komorka  ->  VD, VE = lewy gorny rog w pikselach
+topixel:
+    LD  VD, V0
+    SHR VD
+    SHR VD
+    SHR VD
+    SHR VD
+    SHL VD
+    SHL VD                  ; kolumna * 4
+    LD  VE, V0
+    LD  V1, 15
+    AND VE, V1
+    SHL VE
+    SHL VE                  ; wiersz * 4
+    RET
+
+drawbody:
+    CALL topixel
+    LD  I, sprbody
+    DRW VD, VE, 3
+    RET
+
+drawfood:
+    CALL topixel
+    LD  I, sprfood
+    DRW VD, VE, 3
+    RET
+
+; V9 = szukana komorka  ->  VC = 1 jesli lezy na niej waz
+occupied:
+    LD  VC, 0
+    LD  V8, V6              ; od ogona...
+scanloop:
+    LD  I, BODY
+    ADD I, V8
+    LD  V0, [I]
+    SNE V0, V9
+    LD  VC, 1
+    SE  V8, V5              ; ...do glowy wlacznie
+    JP  scannext
+    RET
+scannext:
+    ADD V8, 1
+    LD  V1, RING
+    AND V8, V1
+    JP  scanloop
+
+; ---------------------------------------------------------------- koniec gry
+dead:
+    LD  V0, 16
+    LD  ST, V0
+    LD  V0, 45
+    LD  DT, V0
+deadwait:
+    LD  V0, DT
+    SE  V0, 0
+    JP  deadwait
+
+    CLS
+    LD  I, scorebuf
+    LD  B, VA
+    LD  I, scorebuf
+    LD  V2, [I]             ; V0 = setki, V1 = dziesiatki, V2 = jednosci
+    LD  VD, 26
+    LD  VE, 13
+    LD  F, V1
+    DRW VD, VE, 5
+    ADD VD, 6
+    LD  F, V2
+    DRW VD, VE, 5
+
+    LD  V0, K               ; dowolny klawisz zaczyna od nowa
+    JP  main
+
+; ---------------------------------------------------------------- dane
+sprbody:
+    gfx ###.....
+    gfx ###.....
+    gfx ###.....
+sprfood:
+    gfx .#......
+    gfx ###.....
+    gfx .#......
+scorebuf:
+    db  0, 0, 0

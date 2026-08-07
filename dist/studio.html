@@ -1,0 +1,1401 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CHIP-8 Studio</title>
+<style>
+:root {
+  --bg: #0b0e13;
+  --panel: #131820;
+  --panel-2: #0e131a;
+  --line: #232c39;
+  --ink: #c8d3e0;
+  --dim: #6b7a8d;
+  --accent: #7fd6a6;
+  --warn: #e8a33d;
+  --bad: #e2604f;
+  --phos: #7fd6a6;
+  --mono: ui-monospace, "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+}
+:root[data-phos="amber"] { --phos: #ffb638; }
+:root[data-phos="ice"]   { --phos: #6fc3ff; }
+:root[data-phos="paper"] { --phos: #e8ecf1; }
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 13px/1.5 var(--mono);
+  -webkit-font-smoothing: antialiased;
+}
+button, select, input, textarea { font: inherit; color: inherit; }
+
+header {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel-2);
+}
+header h1 {
+  margin: 0; font-size: 14px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--phos); font-weight: 600;
+}
+header h1 span { color: var(--dim); }
+.spacer { flex: 1; }
+
+button {
+  background: var(--panel); border: 1px solid var(--line); color: var(--ink);
+  padding: 5px 11px; border-radius: 5px; cursor: pointer; transition: .12s;
+}
+button:hover:not(:disabled) { border-color: var(--phos); color: var(--phos); }
+button:disabled { opacity: .35; cursor: default; }
+button.primary { border-color: var(--phos); color: var(--phos); }
+button.primary:hover { background: color-mix(in srgb, var(--phos) 14%, transparent); }
+select, input[type=text] {
+  background: var(--panel); border: 1px solid var(--line); color: var(--ink);
+  padding: 5px 8px; border-radius: 5px;
+}
+
+main {
+  display: grid; gap: 1px; background: var(--line);
+  grid-template-columns: minmax(300px, 1fr) minmax(660px, auto) minmax(320px, 1fr);
+  align-items: stretch; min-height: calc(100vh - 49px);
+}
+main > section { background: var(--bg); display: flex; flex-direction: column; min-width: 0; }
+
+.pane { border-bottom: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.pane > h2 {
+  margin: 0; padding: 7px 12px; font-size: 10px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--dim); font-weight: 600; background: var(--panel-2);
+  display: flex; align-items: center; gap: 8px;
+}
+.pane > h2 .spacer { flex: 1; }
+.pane > h2 button { padding: 1px 7px; font-size: 11px; }
+.body { padding: 10px 12px; overflow: auto; }
+
+/* ---------------------------------------------------------------- screen */
+.stage { padding: 18px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.crt {
+  position: relative; padding: 14px; border-radius: 10px;
+  background: #05070a; border: 1px solid var(--line);
+  box-shadow: inset 0 0 60px rgba(0,0,0,.9);
+  /* Full-width box with a centred screen, so the canvas can shrink on narrow
+     viewports instead of collapsing against a shrink-to-fit parent. */
+  width: 100%; max-width: 668px; display: flex; justify-content: center;
+}
+canvas {
+  display: block; width: 100%; max-width: 640px; height: auto; aspect-ratio: 2 / 1;
+  image-rendering: pixelated; border-radius: 3px;
+}
+.crt::after {
+  content: ""; position: absolute; inset: 14px; pointer-events: none; border-radius: 3px;
+  max-width: 640px; margin: 0 auto;
+  background: repeating-linear-gradient(to bottom, rgba(0,0,0,.28) 0 1px, transparent 1px 3px);
+  opacity: var(--scan, .5);
+}
+.transport { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; justify-content: center; }
+.transport .sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
+label.slider { display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 11px; }
+input[type=range] { accent-color: var(--phos); width: 130px; }
+
+.keypad { display: grid; grid-template-columns: repeat(4, 46px); gap: 5px; }
+.keypad button {
+  height: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1px; padding: 0; line-height: 1;
+}
+.keypad button b { font-size: 14px; font-weight: 600; }
+.keypad button i { font-size: 9px; font-style: normal; color: var(--dim); }
+.keypad button.down { background: var(--phos); color: #06090d; border-color: var(--phos); }
+.keypad button.down i { color: #06090d; opacity: .7; }
+
+/* ---------------------------------------------------------------- editor */
+.editor-wrap { display: flex; flex: 1; min-height: 260px; background: var(--panel-2); }
+.gutter {
+  padding: 10px 8px 10px 12px; text-align: right; color: #3d4a5c; user-select: none;
+  white-space: pre; overflow: hidden; font-size: 12px; line-height: 1.55;
+}
+.gutter b { color: var(--bad); font-weight: 400; }
+textarea#src {
+  flex: 1; background: transparent; border: 0; resize: none; outline: none;
+  padding: 10px 12px 10px 0; line-height: 1.55; font-size: 12px; white-space: pre; overflow: auto;
+  tab-size: 4;
+}
+#status {
+  padding: 7px 12px; font-size: 11px; border-top: 1px solid var(--line);
+  background: var(--panel-2); color: var(--dim); white-space: pre-wrap;
+}
+#status.ok { color: var(--accent); }
+#status.err { color: var(--bad); }
+
+/* ---------------------------------------------------------------- state */
+.regs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.reg {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
+  padding: 3px 6px; display: flex; justify-content: space-between; gap: 6px; font-size: 11px;
+}
+.reg span { color: var(--dim); }
+.reg.hot { border-color: var(--phos); }
+.reg.hot b { color: var(--phos); }
+.reg b { font-weight: 600; }
+
+.cpu { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 8px; }
+.flags { margin-top: 8px; font-size: 11px; color: var(--dim); }
+.flags em { font-style: normal; color: var(--warn); }
+
+#stack { font-size: 11px; color: var(--dim); margin-top: 8px; word-break: break-all; }
+
+/* ---------------------------------------------------------------- disasm */
+#disasm { font-size: 12px; line-height: 1.45; }
+#disasm .row { display: flex; gap: 8px; padding: 0 4px; border-radius: 3px; cursor: pointer; white-space: pre; }
+#disasm .row:hover { background: var(--panel); }
+#disasm .row.pc { background: color-mix(in srgb, var(--phos) 18%, transparent); }
+#disasm .row.pc .txt { color: var(--phos); }
+#disasm .a { color: #4d5b6e; width: 3.5em; }
+#disasm .b { color: #556478; width: 4.5em; }
+#disasm .txt { color: var(--ink); }
+#disasm .lbl { color: var(--warn); }
+#disasm .bp { width: 1em; color: var(--bad); }
+
+#mem { font-size: 11.5px; line-height: 1.5; white-space: pre; color: var(--dim); }
+#mem .a { color: #4d5b6e; }
+#mem u { text-decoration: none; color: var(--phos); }
+#mem s { text-decoration: none; color: var(--warn); }
+
+.quirks { display: grid; gap: 4px; font-size: 11.5px; }
+.quirks label { display: flex; gap: 7px; align-items: flex-start; cursor: pointer; }
+.quirks input { accent-color: var(--phos); margin: 3px 0 0; }
+.quirks small { color: var(--dim); display: block; }
+
+@media (max-width: 1400px) {
+  main { grid-template-columns: 1fr; }
+  main > section { min-height: 0; }
+}
+</style>
+
+<header>
+  <h1>CHIP&#8209;8 <span>Studio</span></h1>
+  <select id="romPick" title="Wybierz program"></select>
+  <button id="btnAsm" class="primary">Asembluj &amp; uruchom <small style="color:var(--dim)">Ctrl+&crarr;</small></button>
+  <div class="spacer"></div>
+  <label class="slider">luminofor
+    <select id="phos">
+      <option value="green">zielony</option>
+      <option value="amber">bursztyn</option>
+      <option value="ice">lod</option>
+      <option value="paper">biel</option>
+    </select>
+  </label>
+  <button id="btnExport">Pobierz .ch8</button>
+</header>
+
+<main>
+  <!-- ------------------------------------------------------------ EDYTOR -->
+  <section>
+    <div class="pane" style="flex:1">
+      <h2>Zrodlo <span class="spacer"></span><span id="srcInfo"></span></h2>
+      <div class="editor-wrap">
+        <div class="gutter" id="gutter"></div>
+        <textarea id="src" spellcheck="false" autocomplete="off"></textarea>
+      </div>
+      <div id="status">Gotowy.</div>
+    </div>
+    <div class="pane">
+      <h2>Quirki interpretera</h2>
+      <div class="body">
+        <div style="display:flex;gap:6px;margin-bottom:10px">
+          <button data-profile="vip">COSMAC VIP</button>
+          <button data-profile="modern">Nowoczesny</button>
+        </div>
+        <div class="quirks" id="quirks"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------------- EKRAN -->
+  <section>
+    <div class="stage">
+      <div class="crt"><canvas id="screen" width="64" height="32"></canvas></div>
+
+      <div class="transport">
+        <button id="btnRun" class="primary">&#9654; Uruchom</button>
+        <button id="btnStep">&#8677; Krok</button>
+        <button id="btnBack">&#8676; Cofnij</button>
+        <button id="btnFrame">Klatka</button>
+        <button id="btnReset">&#8635; Reset</button>
+        <div class="sep"></div>
+        <label class="slider">tempo
+          <input type="range" id="speed" min="1" max="60" value="12">
+          <b id="speedVal" style="color:var(--ink);width:5.5em">12 op/kl</b>
+        </label>
+        <div class="sep"></div>
+        <label class="slider"><input type="checkbox" id="glow" checked> poswiata</label>
+        <label class="slider"><input type="checkbox" id="snd" checked> dzwiek</label>
+      </div>
+
+      <div class="keypad" id="keypad"></div>
+      <div style="color:var(--dim);font-size:11px;text-align:center;max-width:520px">
+        Klawiatura fizyczna: <b style="color:var(--ink)">1234 / QWER / ASDF / ZXCV</b>.
+        W wazu i odbijaku steruj <b style="color:var(--ink)">2 4 6 8</b> (W A D X na klawiaturze).
+      </div>
+    </div>
+  </section>
+
+  <!-- --------------------------------------------------------- DEBUGGER -->
+  <section>
+    <div class="pane">
+      <h2>Rejestry</h2>
+      <div class="body">
+        <div class="regs" id="regs"></div>
+        <div class="cpu" id="cpu"></div>
+        <div class="flags" id="flags"></div>
+        <div id="stack"></div>
+      </div>
+    </div>
+
+    <div class="pane" style="flex:1.4">
+      <h2>Deasembler <span class="spacer"></span>
+        <span style="color:var(--dim);font-weight:400;text-transform:none;letter-spacing:0">klik = pulapka</span>
+      </h2>
+      <div class="body" id="disasm"></div>
+    </div>
+
+    <div class="pane" style="flex:1">
+      <h2>Pamiec <span class="spacer"></span>
+        <input type="text" id="memGo" placeholder="0x200" size="6" style="padding:1px 6px">
+        <button id="memPC">PC</button><button id="memI">I</button>
+      </h2>
+      <div class="body" id="mem"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+// CHIP-8 CPU core.
+// Runs unchanged in Node (tests, ROM build) and in the browser (studio.html).
+
+const SCREEN_W = 64;
+const SCREEN_H = 32;
+const MEM_SIZE = 4096;
+const PROG_START = 0x200;
+const FONT_START = 0x50;
+
+const FONT = [
+  0xf0, 0x90, 0x90, 0x90, 0xf0, // 0
+  0x20, 0x60, 0x20, 0x20, 0x70, // 1
+  0xf0, 0x10, 0xf0, 0x80, 0xf0, // 2
+  0xf0, 0x10, 0xf0, 0x10, 0xf0, // 3
+  0x90, 0x90, 0xf0, 0x10, 0x10, // 4
+  0xf0, 0x80, 0xf0, 0x10, 0xf0, // 5
+  0xf0, 0x80, 0xf0, 0x90, 0xf0, // 6
+  0xf0, 0x10, 0x20, 0x40, 0x40, // 7
+  0xf0, 0x90, 0xf0, 0x90, 0xf0, // 8
+  0xf0, 0x90, 0xf0, 0x10, 0xf0, // 9
+  0xf0, 0x90, 0xf0, 0x90, 0x90, // A
+  0xe0, 0x90, 0xe0, 0x90, 0xe0, // B
+  0xf0, 0x80, 0x80, 0x80, 0xf0, // C
+  0xe0, 0x90, 0x90, 0x90, 0xe0, // D
+  0xf0, 0x80, 0xf0, 0x80, 0xf0, // E
+  0xf0, 0x80, 0xf0, 0x80, 0x80, // F
+];
+
+// Interpreter behaviours that real hardware and later ports disagreed on.
+// Defaults reproduce the 1977 COSMAC VIP interpreter.
+const DEFAULT_QUIRKS = {
+  vfReset: true,     // 8XY1/2/3 clear VF
+  memoryI: true,     // FX55/FX65 leave I incremented past the last register
+  displayWait: true, // DXYN stalls until the next 60 Hz frame
+  clipping: true,    // sprites clip at the screen edge instead of wrapping
+  shiftVy: true,     // 8XY6/8XYE shift VY into VX (false = shift VX in place)
+  jumpVx: false,     // BNNN uses V0 (true = SUPER-CHIP's BXNN, uses VX)
+};
+
+class Chip8Error extends Error {
+  constructor(message, pc, opcode) {
+    super(message);
+    this.name = 'Chip8Error';
+    this.pc = pc;
+    this.opcode = opcode;
+  }
+}
+
+class Chip8 {
+  constructor(options = {}) {
+    this.quirks = { ...DEFAULT_QUIRKS, ...(options.quirks || {}) };
+    this.mem = new Uint8Array(MEM_SIZE);
+    this.v = new Uint8Array(16);
+    this.stack = new Uint16Array(16);
+    this.display = new Uint8Array(SCREEN_W * SCREEN_H);
+    this.keys = new Uint8Array(16);
+    this.history = [];
+    this.historyLimit = options.historyLimit ?? 0;
+    this.reset(options.seed ?? 0x1234abcd);
+  }
+
+  // xorshift32. Kept on the instance rather than in a closure so that a
+  // snapshot captures it — otherwise rewinding or reloading a saved game
+  // would replay a different sequence of RND results.
+  random() {
+    let s = this.rngState;
+    s ^= s << 13; s >>>= 0;
+    s ^= s >>> 17;
+    s ^= s << 5; s >>>= 0;
+    this.rngState = s;
+    return s & 0xff;
+  }
+
+  reset(seed = this.seed) {
+    this.seed = seed >>> 0;
+    this.rngState = this.seed || 0x9e3779b9;
+    this.mem.fill(0);
+    this.mem.set(FONT, FONT_START);
+    this.v.fill(0);
+    this.stack.fill(0);
+    this.display.fill(0);
+    this.i = 0;
+    this.pc = PROG_START;
+    this.sp = 0;
+    this.dt = 0;
+    this.st = 0;
+    this.cycles = 0;
+    this.frames = 0;
+    this.halted = false;
+    this.waitingKey = false;     // parked inside FX0A
+    this.waitRelease = -1;       // key seen down, waiting for the release
+    this.vblank = false;         // consumed by DXYN when displayWait is on
+    this.drawFlag = true;
+    this.history.length = 0;
+    if (this.rom) this.mem.set(this.rom, this.romAddr);
+  }
+
+  load(bytes, addr = PROG_START) {
+    if (addr + bytes.length > MEM_SIZE) {
+      throw new Chip8Error(`ROM of ${bytes.length} B does not fit at 0x${addr.toString(16)}`, addr, 0);
+    }
+    this.rom = Uint8Array.from(bytes);
+    this.romAddr = addr;
+    this.reset(this.seed);
+  }
+
+  snapshot() {
+    return {
+      mem: this.mem.slice(), v: this.v.slice(), stack: this.stack.slice(),
+      display: this.display.slice(), i: this.i, pc: this.pc, sp: this.sp,
+      dt: this.dt, st: this.st, cycles: this.cycles, halted: this.halted,
+      waitingKey: this.waitingKey, waitRelease: this.waitRelease, vblank: this.vblank,
+      rngState: this.rngState,
+    };
+  }
+
+  restore(s) {
+    this.mem.set(s.mem); this.v.set(s.v); this.stack.set(s.stack);
+    this.display.set(s.display);
+    this.i = s.i; this.pc = s.pc; this.sp = s.sp; this.dt = s.dt; this.st = s.st;
+    this.cycles = s.cycles; this.halted = s.halted;
+    this.waitingKey = s.waitingKey; this.waitRelease = s.waitRelease; this.vblank = s.vblank;
+    this.rngState = s.rngState;
+    this.drawFlag = true;
+  }
+
+  // Rewind one instruction. Returns false when the history ring is empty.
+  stepBack() {
+    const s = this.history.pop();
+    if (!s) return false;
+    this.restore(s);
+    return true;
+  }
+
+  // 60 Hz housekeeping: timers and the vblank token DXYN waits on.
+  tick60() {
+    if (this.dt > 0) this.dt--;
+    if (this.st > 0) this.st--;
+    this.vblank = true;
+    this.frames++;
+  }
+
+  keyDown(k) { this.keys[k & 0xf] = 1; }
+  keyUp(k) { this.keys[k & 0xf] = 0; }
+
+  // Executes one instruction. Returns false if the CPU is parked (FX0A / display wait).
+  step() {
+    if (this.halted) return false;
+    if (this.historyLimit > 0) {
+      this.history.push(this.snapshot());
+      if (this.history.length > this.historyLimit) this.history.shift();
+    }
+    const pc = this.pc;
+    if (pc + 1 >= MEM_SIZE) throw new Chip8Error('PC ran past the end of memory', pc, 0);
+
+    const opcode = (this.mem[pc] << 8) | this.mem[pc + 1];
+    this.pc = (pc + 2) & 0xfff;
+
+    const x = (opcode >> 8) & 0xf;
+    const y = (opcode >> 4) & 0xf;
+    const n = opcode & 0xf;
+    const nn = opcode & 0xff;
+    const nnn = opcode & 0xfff;
+    const v = this.v;
+    let executed = true;
+
+    switch (opcode & 0xf000) {
+      case 0x0000:
+        if (opcode === 0x00e0) { this.display.fill(0); this.drawFlag = true; }
+        else if (opcode === 0x00ee) {
+          if (this.sp === 0) throw new Chip8Error('RET with an empty stack', pc, opcode);
+          this.pc = this.stack[--this.sp];
+        } else throw new Chip8Error(`Unsupported machine-code call 0x${hex(opcode, 4)}`, pc, opcode);
+        break;
+
+      case 0x1000:
+        if (nnn === pc) { this.halted = true; this.haltReason = 'infinite loop (JP to self)'; }
+        this.pc = nnn;
+        break;
+
+      case 0x2000:
+        if (this.sp >= this.stack.length) throw new Chip8Error('Stack overflow (16 levels)', pc, opcode);
+        this.stack[this.sp++] = this.pc;
+        this.pc = nnn;
+        break;
+
+      case 0x3000: if (v[x] === nn) this.skip(); break;
+      case 0x4000: if (v[x] !== nn) this.skip(); break;
+      case 0x5000:
+        if (n !== 0) throw new Chip8Error(`Unknown opcode 0x${hex(opcode, 4)}`, pc, opcode);
+        if (v[x] === v[y]) this.skip();
+        break;
+      case 0x6000: v[x] = nn; break;
+      case 0x7000: v[x] = (v[x] + nn) & 0xff; break;
+
+      case 0x8000: {
+        switch (n) {
+          case 0x0: v[x] = v[y]; break;
+          case 0x1: v[x] |= v[y]; if (this.quirks.vfReset) v[0xf] = 0; break;
+          case 0x2: v[x] &= v[y]; if (this.quirks.vfReset) v[0xf] = 0; break;
+          case 0x3: v[x] ^= v[y]; if (this.quirks.vfReset) v[0xf] = 0; break;
+          case 0x4: { const r = v[x] + v[y]; v[x] = r & 0xff; v[0xf] = r > 0xff ? 1 : 0; break; }
+          case 0x5: { const r = v[x] - v[y]; v[x] = r & 0xff; v[0xf] = r >= 0 ? 1 : 0; break; }
+          case 0x6: { const src = this.quirks.shiftVy ? v[y] : v[x]; const f = src & 1; v[x] = src >> 1; v[0xf] = f; break; }
+          case 0x7: { const r = v[y] - v[x]; v[x] = r & 0xff; v[0xf] = r >= 0 ? 1 : 0; break; }
+          case 0xe: { const src = this.quirks.shiftVy ? v[y] : v[x]; const f = (src >> 7) & 1; v[x] = (src << 1) & 0xff; v[0xf] = f; break; }
+          default: throw new Chip8Error(`Unknown opcode 0x${hex(opcode, 4)}`, pc, opcode);
+        }
+        break;
+      }
+
+      case 0x9000:
+        if (n !== 0) throw new Chip8Error(`Unknown opcode 0x${hex(opcode, 4)}`, pc, opcode);
+        if (v[x] !== v[y]) this.skip();
+        break;
+
+      case 0xa000: this.i = nnn; break;
+      case 0xb000: this.pc = (nnn + (this.quirks.jumpVx ? v[x] : v[0])) & 0xfff; break;
+      case 0xc000: v[x] = this.random() & nn; break;
+
+      case 0xd000:
+        if (this.quirks.displayWait && !this.vblank) {
+          this.pc = pc; // park on this instruction until tick60() releases us
+          executed = false;
+        } else {
+          this.vblank = false;
+          this.draw(v[x], v[y], n);
+        }
+        break;
+
+      case 0xe000:
+        if (nn === 0x9e) { if (this.keys[v[x] & 0xf]) this.skip(); }
+        else if (nn === 0xa1) { if (!this.keys[v[x] & 0xf]) this.skip(); }
+        else throw new Chip8Error(`Unknown opcode 0x${hex(opcode, 4)}`, pc, opcode);
+        break;
+
+      case 0xf000:
+        switch (nn) {
+          case 0x07: v[x] = this.dt; break;
+          case 0x0a: executed = this.waitForKey(x, pc); break;
+          case 0x15: this.dt = v[x]; break;
+          case 0x18: this.st = v[x]; break;
+          case 0x1e: this.i = (this.i + v[x]) & 0xfff; break;
+          case 0x29: this.i = FONT_START + (v[x] & 0xf) * 5; break;
+          case 0x33:
+            this.write(this.i, Math.floor(v[x] / 100));
+            this.write(this.i + 1, Math.floor(v[x] / 10) % 10);
+            this.write(this.i + 2, v[x] % 10);
+            break;
+          case 0x55:
+            for (let r = 0; r <= x; r++) this.write(this.i + r, v[r]);
+            if (this.quirks.memoryI) this.i = (this.i + x + 1) & 0xfff;
+            break;
+          case 0x65:
+            for (let r = 0; r <= x; r++) v[r] = this.mem[(this.i + r) & 0xfff];
+            if (this.quirks.memoryI) this.i = (this.i + x + 1) & 0xfff;
+            break;
+          default: throw new Chip8Error(`Unknown opcode 0x${hex(opcode, 4)}`, pc, opcode);
+        }
+        break;
+
+      default: throw new Chip8Error(`Unknown opcode 0x${hex(opcode, 4)}`, pc, opcode);
+    }
+
+    if (executed) this.cycles++;
+    else if (this.historyLimit > 0) this.history.pop(); // nothing happened, drop the snapshot
+    return executed;
+  }
+
+  skip() { this.pc = (this.pc + 2) & 0xfff; }
+
+  write(addr, value) {
+    addr &= 0xfff;
+    if (addr < PROG_START && addr >= FONT_START && addr < FONT_START + FONT.length) {
+      // Writing over the font is legal on real hardware but almost always a bug.
+      this.fontClobbered = true;
+    }
+    this.mem[addr] = value & 0xff;
+  }
+
+  // COSMAC VIP semantics: the key must be pressed *and* released before FX0A returns.
+  waitForKey(x, pc) {
+    if (this.waitRelease >= 0) {
+      if (!this.keys[this.waitRelease]) {
+        this.v[x] = this.waitRelease;
+        this.waitRelease = -1;
+        this.waitingKey = false;
+        return true;
+      }
+    } else {
+      for (let k = 0; k < 16; k++) if (this.keys[k]) { this.waitRelease = k; break; }
+    }
+    this.waitingKey = true;
+    this.pc = pc;
+    return false;
+  }
+
+  draw(vx, vy, rows) {
+    const { clipping } = this.quirks;
+    const x0 = vx % SCREEN_W;
+    const y0 = vy % SCREEN_H;
+    this.v[0xf] = 0;
+    for (let row = 0; row < rows; row++) {
+      let py = y0 + row;
+      if (py >= SCREEN_H) { if (clipping) break; py %= SCREEN_H; }
+      const bits = this.mem[(this.i + row) & 0xfff];
+      for (let bit = 0; bit < 8; bit++) {
+        if (!(bits & (0x80 >> bit))) continue;
+        let px = x0 + bit;
+        if (px >= SCREEN_W) { if (clipping) continue; px %= SCREEN_W; }
+        const idx = py * SCREEN_W + px;
+        if (this.display[idx]) this.v[0xf] = 1;
+        this.display[idx] ^= 1;
+      }
+    }
+    this.drawFlag = true;
+  }
+}
+
+function hex(n, width = 2) {
+  return n.toString(16).toUpperCase().padStart(width, '0');
+}
+
+// Two-pass CHIP-8 assembler and a matching disassembler.
+//
+// Syntax:
+//   ; comment                  label:            org 0x200
+//   define WIDTH 8             db 0xF0, 0b1010   dw label
+//   gfx ..####..               align 2
+//   LD V0, WIDTH*2             DRW V0, V1, 5
+//
+// Numbers: 42, 0xFF, $FF, 0b1010, %1010, 'A'
+// Expressions: + - * / ( ) over labels and defines.
+
+
+class AsmError extends Error {
+  constructor(message, line) {
+    super(line ? `line ${line}: ${message}` : message);
+    this.name = 'AsmError';
+    this.line = line;
+  }
+}
+
+const REG = /^[vV]([0-9a-fA-F])$/;
+
+function isReg(tok) { return REG.test(tok); }
+function regNum(tok) { return parseInt(tok.match(REG)[1], 16); }
+
+// ---------------------------------------------------------------- expressions
+
+function tokenizeExpr(src, line) {
+  const out = [];
+  let i = 0;
+  while (i < src.length) {
+    const c = src[i];
+    if (/\s/.test(c)) { i++; continue; }
+    if ('+-*/()'.includes(c)) { out.push({ t: c }); i++; continue; }
+    if (c === "'") {
+      if (src[i + 2] !== "'") throw new AsmError(`malformed character literal in "${src}"`, line);
+      out.push({ t: 'num', v: src.charCodeAt(i + 1) });
+      i += 3;
+      continue;
+    }
+    const rest = src.slice(i);
+    let m;
+    if ((m = rest.match(/^0[xX][0-9a-fA-F]+/)) || (m = rest.match(/^\$[0-9a-fA-F]+/))) {
+      out.push({ t: 'num', v: parseInt(m[0].replace(/^\$/, '0x'), 16) });
+    } else if ((m = rest.match(/^0[bB][01]+/)) || (m = rest.match(/^%[01]+/))) {
+      out.push({ t: 'num', v: parseInt(m[0].replace(/^(0[bB]|%)/, ''), 2) });
+    } else if ((m = rest.match(/^\d+/))) {
+      out.push({ t: 'num', v: parseInt(m[0], 10) });
+    } else if ((m = rest.match(/^[A-Za-z_.][A-Za-z0-9_.]*/))) {
+      out.push({ t: 'name', v: m[0] });
+    } else {
+      throw new AsmError(`cannot parse "${rest}"`, line);
+    }
+    i += m[0].length;
+  }
+  return out;
+}
+
+function evalExpr(src, symbols, line, allowUnknown) {
+  const toks = tokenizeExpr(src, line);
+  let p = 0;
+  const peek = () => toks[p];
+  const eat = (t) => (toks[p] && toks[p].t === t ? toks[p++] : null);
+
+  function primary() {
+    if (eat('(')) {
+      const v = sum();
+      if (!eat(')')) throw new AsmError(`missing ")" in "${src}"`, line);
+      return v;
+    }
+    if (eat('-')) return -primary();
+    if (eat('+')) return primary();
+    const tok = peek();
+    if (!tok) throw new AsmError(`unexpected end of expression "${src}"`, line);
+    p++;
+    if (tok.t === 'num') return tok.v;
+    if (tok.t === 'name') {
+      const key = tok.v.toLowerCase();
+      if (key in symbols) return symbols[key];
+      if (allowUnknown) return 0; // pass 1: any placeholder of the right size
+      throw new AsmError(`unknown symbol "${tok.v}"`, line);
+    }
+    throw new AsmError(`unexpected "${tok.t}" in "${src}"`, line);
+  }
+  function product() {
+    let v = primary();
+    for (;;) {
+      if (eat('*')) v *= primary();
+      else if (eat('/')) v = Math.floor(v / primary());
+      else return v;
+    }
+  }
+  function sum() {
+    let v = product();
+    for (;;) {
+      if (eat('+')) v += product();
+      else if (eat('-')) v -= product();
+      else return v;
+    }
+  }
+  const value = sum();
+  if (p !== toks.length) throw new AsmError(`trailing junk in "${src}"`, line);
+  return value;
+}
+
+// ------------------------------------------------------------------- assembler
+
+function splitOperands(text) {
+  return text.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+}
+
+function parseLines(source) {
+  return source.split(/\r?\n/).map((raw, idx) => {
+    let text = raw.replace(/;.*$/, '').replace(/\/\/.*$/, '').trim();
+    const line = idx + 1;
+    let label = null;
+    const m = text.match(/^([A-Za-z_.][A-Za-z0-9_.]*)\s*:/);
+    if (m) { label = m[1]; text = text.slice(m[0].length).trim(); }
+    if (!text) return { line, label, op: null, args: [], raw };
+    const sp = text.search(/\s/);
+    const op = (sp < 0 ? text : text.slice(0, sp)).toLowerCase();
+    const rest = sp < 0 ? '' : text.slice(sp).trim();
+    return { line, label, op, args: splitOperands(rest), rest, raw };
+  });
+}
+
+function gfxByte(spec, line) {
+  const bits = spec.replace(/["']/g, '').trim();
+  if (bits.length !== 8) throw new AsmError(`gfx needs exactly 8 columns, got ${bits.length}`, line);
+  let byte = 0;
+  for (const ch of bits) byte = (byte << 1) | (ch === '.' || ch === '0' || ch === ' ' || ch === '_' ? 0 : 1);
+  return byte;
+}
+
+/**
+ * Assemble source text.
+ * @returns {{bytes: Uint8Array, start: number, symbols: object, lineMap: Map<number, number>}}
+ */
+function assemble(source) {
+  const stmts = parseLines(source);
+  const symbols = Object.create(null);
+
+  // Pass 1: measure every statement and record label addresses.
+  let pc = PROG_START;
+  const sizes = [];
+  for (const st of stmts) {
+    const size = measure(st, symbols, pc);
+    // org/align move the cursor before a label on the same line is bound.
+    if (size.newPc !== undefined) pc = size.newPc;
+    if (st.label) {
+      const key = st.label.toLowerCase();
+      if (key in symbols) throw new AsmError(`duplicate label "${st.label}"`, st.line);
+      symbols[key] = pc;
+    }
+    pc += size.n;
+    sizes.push(size);
+  }
+
+  // Pass 2: emit.
+  const out = new Map(); // addr -> byte
+  const lineMap = new Map(); // addr -> source line
+  pc = PROG_START;
+  stmts.forEach((st, idx) => {
+    const size = sizes[idx];
+    if (size.newPc !== undefined) pc = size.newPc;
+    if (size.n === 0) return;
+    const bytes = emit(st, symbols, pc);
+    if (bytes.length !== size.n) {
+      throw new AsmError(`internal: "${st.op}" sized ${size.n} B but emitted ${bytes.length} B`, st.line);
+    }
+    lineMap.set(pc, st.line);
+    for (const b of bytes) {
+      if (pc > 0xfff) throw new AsmError('program overflows 4 KB of memory', st.line);
+      out.set(pc++, b & 0xff);
+    }
+  });
+
+  if (out.size === 0) throw new AsmError('nothing to assemble');
+  const lo = Math.min(...out.keys());
+  const hi = Math.max(...out.keys());
+  const bytes = new Uint8Array(hi - lo + 1);
+  for (const [addr, b] of out) bytes[addr - lo] = b;
+  return { bytes, start: lo, symbols, lineMap };
+}
+
+function measure(st, symbols, pc) {
+  if (!st.op) return { n: 0 };
+  switch (st.op) {
+    case 'define':
+    case 'equ': {
+      const [name, ...valParts] = st.rest.split(/[\s,]+/);
+      if (!name || valParts.length === 0) throw new AsmError('define needs a name and a value', st.line);
+      symbols[name.toLowerCase()] = evalExpr(valParts.join(' '), symbols, st.line, false);
+      return { n: 0 };
+    }
+    case 'org': return { n: 0, newPc: evalExpr(st.rest, symbols, st.line, false) };
+    case 'align': {
+      const a = st.rest ? evalExpr(st.rest, symbols, st.line, false) : 2;
+      return { n: 0, newPc: Math.ceil(pc / a) * a };
+    }
+    case 'db': return { n: st.args.length };
+    case 'dw': return { n: st.args.length * 2 };
+    case 'gfx': return { n: st.args.length || 1 };
+    default: return { n: 2 };
+  }
+}
+
+function emit(st, symbols, pc) {
+  const line = st.line;
+  const E = (s) => evalExpr(s, symbols, line, false);
+  const bad = (msg) => { throw new AsmError(msg, line); };
+  const a = st.args;
+
+  switch (st.op) {
+    case 'db': return a.map((s) => E(s) & 0xff);
+    case 'dw': return a.flatMap((s) => { const v = E(s) & 0xffff; return [v >> 8, v & 0xff]; });
+    case 'gfx': return (a.length ? a : [st.rest]).map((s) => gfxByte(s, line));
+    default: break;
+  }
+
+  const w = (v) => [(v >> 8) & 0xff, v & 0xff];
+  const addr = (s) => {
+    const v = E(s);
+    if (v < 0 || v > 0xfff) bad(`address 0x${v.toString(16)} is outside 0x000-0xFFF`);
+    return v;
+  };
+  const byte = (s) => {
+    const v = E(s);
+    if (v < -128 || v > 255) bad(`byte value ${v} out of range`);
+    return v & 0xff;
+  };
+  const need = (count) => { if (a.length !== count) bad(`${st.op.toUpperCase()} expects ${count} operand(s), got ${a.length}`); };
+  const alu = (nib) => { need(2); if (!isReg(a[0]) || !isReg(a[1])) bad(`${st.op.toUpperCase()} needs two registers`); return w(0x8000 | (regNum(a[0]) << 8) | (regNum(a[1]) << 4) | nib); };
+
+  switch (st.op) {
+    case 'cls': need(0); return w(0x00e0);
+    case 'ret': need(0); return w(0x00ee);
+    case 'sys': need(1); return w(0x0000 | addr(a[0]));
+
+    case 'jp':
+      if (a.length === 2) {
+        if (!isReg(a[0]) || regNum(a[0]) !== 0) bad('JP with two operands must be "JP V0, addr"');
+        return w(0xb000 | addr(a[1]));
+      }
+      need(1); return w(0x1000 | addr(a[0]));
+
+    case 'call': need(1); return w(0x2000 | addr(a[0]));
+
+    case 'se': need(2);
+      if (!isReg(a[0])) bad('SE needs a register first');
+      return isReg(a[1])
+        ? w(0x5000 | (regNum(a[0]) << 8) | (regNum(a[1]) << 4))
+        : w(0x3000 | (regNum(a[0]) << 8) | byte(a[1]));
+
+    case 'sne': need(2);
+      if (!isReg(a[0])) bad('SNE needs a register first');
+      return isReg(a[1])
+        ? w(0x9000 | (regNum(a[0]) << 8) | (regNum(a[1]) << 4))
+        : w(0x4000 | (regNum(a[0]) << 8) | byte(a[1]));
+
+    case 'ld': {
+      need(2);
+      const [d, s] = a;
+      const dl = d.toLowerCase(), sl = s.toLowerCase();
+      if (isReg(d)) {
+        const x = regNum(d) << 8;
+        if (isReg(s)) return w(0x8000 | x | (regNum(s) << 4));
+        if (sl === 'dt') return w(0xf007 | x);
+        if (sl === 'k') return w(0xf00a | x);
+        if (sl === '[i]') return w(0xf065 | x);
+        if (sl === 'i') bad('cannot load I into a register');
+        return w(0x6000 | x | byte(s));
+      }
+      if (dl === 'i') return w(0xa000 | addr(s));
+      if (!isReg(s)) bad(`LD ${d}, ${s} — the source must be a register here`);
+      const x = regNum(s) << 8;
+      if (dl === 'dt') return w(0xf015 | x);
+      if (dl === 'st') return w(0xf018 | x);
+      if (dl === 'f') return w(0xf029 | x);
+      if (dl === 'b') return w(0xf033 | x);
+      if (dl === '[i]') return w(0xf055 | x);
+      return bad(`unknown LD destination "${d}"`);
+    }
+
+    case 'add': {
+      need(2);
+      const [d, s] = a;
+      if (d.toLowerCase() === 'i') {
+        if (!isReg(s)) bad('ADD I, Vx needs a register');
+        return w(0xf01e | (regNum(s) << 8));
+      }
+      if (!isReg(d)) bad('ADD needs a register or I first');
+      return isReg(s)
+        ? w(0x8004 | (regNum(d) << 8) | (regNum(s) << 4))
+        : w(0x7000 | (regNum(d) << 8) | byte(s));
+    }
+
+    case 'or': return alu(1);
+    case 'and': return alu(2);
+    case 'xor': return alu(3);
+    case 'sub': return alu(5);
+    case 'subn': return alu(7);
+
+    case 'shr':
+    case 'shl': {
+      const nib = st.op === 'shr' ? 6 : 0xe;
+      if (a.length === 1) {
+        if (!isReg(a[0])) bad(`${st.op.toUpperCase()} needs a register`);
+        // Encode as 8XX6 so it means the same under both shift quirks.
+        return w(0x8000 | (regNum(a[0]) << 8) | (regNum(a[0]) << 4) | nib);
+      }
+      return alu(nib);
+    }
+
+    case 'rnd': need(2);
+      if (!isReg(a[0])) bad('RND needs a register first');
+      return w(0xc000 | (regNum(a[0]) << 8) | byte(a[1]));
+
+    case 'drw': need(3);
+      if (!isReg(a[0]) || !isReg(a[1])) bad('DRW needs two registers and a height');
+      { const h = E(a[2]); if (h < 0 || h > 15) bad(`sprite height ${h} must be 0-15`);
+        return w(0xd000 | (regNum(a[0]) << 8) | (regNum(a[1]) << 4) | h); }
+
+    case 'skp': need(1); if (!isReg(a[0])) bad('SKP needs a register'); return w(0xe09e | (regNum(a[0]) << 8));
+    case 'sknp': need(1); if (!isReg(a[0])) bad('SKNP needs a register'); return w(0xe0a1 | (regNum(a[0]) << 8));
+
+    default: return bad(`unknown instruction "${st.op}"`);
+  }
+}
+
+// ----------------------------------------------------------------- disassembler
+
+function disassemble(opcode) {
+  const x = (opcode >> 8) & 0xf;
+  const y = (opcode >> 4) & 0xf;
+  const n = opcode & 0xf;
+  const nn = opcode & 0xff;
+  const nnn = opcode & 0xfff;
+  const V = (r) => `V${hex(r, 1)}`;
+  const A = () => `0x${hex(nnn, 3)}`;
+  const B = () => `0x${hex(nn, 2)}`;
+
+  switch (opcode & 0xf000) {
+    case 0x0000:
+      if (opcode === 0x00e0) return 'CLS';
+      if (opcode === 0x00ee) return 'RET';
+      return `SYS  ${A()}`;
+    case 0x1000: return `JP   ${A()}`;
+    case 0x2000: return `CALL ${A()}`;
+    case 0x3000: return `SE   ${V(x)}, ${B()}`;
+    case 0x4000: return `SNE  ${V(x)}, ${B()}`;
+    case 0x5000: return n === 0 ? `SE   ${V(x)}, ${V(y)}` : null;
+    case 0x6000: return `LD   ${V(x)}, ${B()}`;
+    case 0x7000: return `ADD  ${V(x)}, ${B()}`;
+    case 0x8000: switch (n) {
+      case 0x0: return `LD   ${V(x)}, ${V(y)}`;
+      case 0x1: return `OR   ${V(x)}, ${V(y)}`;
+      case 0x2: return `AND  ${V(x)}, ${V(y)}`;
+      case 0x3: return `XOR  ${V(x)}, ${V(y)}`;
+      case 0x4: return `ADD  ${V(x)}, ${V(y)}`;
+      case 0x5: return `SUB  ${V(x)}, ${V(y)}`;
+      case 0x6: return x === y ? `SHR  ${V(x)}` : `SHR  ${V(x)}, ${V(y)}`;
+      case 0x7: return `SUBN ${V(x)}, ${V(y)}`;
+      case 0xe: return x === y ? `SHL  ${V(x)}` : `SHL  ${V(x)}, ${V(y)}`;
+      default: return null;
+    }
+    case 0x9000: return n === 0 ? `SNE  ${V(x)}, ${V(y)}` : null;
+    case 0xa000: return `LD   I, ${A()}`;
+    case 0xb000: return `JP   V0, ${A()}`;
+    case 0xc000: return `RND  ${V(x)}, ${B()}`;
+    case 0xd000: return `DRW  ${V(x)}, ${V(y)}, ${n}`;
+    case 0xe000:
+      if (nn === 0x9e) return `SKP  ${V(x)}`;
+      if (nn === 0xa1) return `SKNP ${V(x)}`;
+      return null;
+    case 0xf000: switch (nn) {
+      case 0x07: return `LD   ${V(x)}, DT`;
+      case 0x0a: return `LD   ${V(x)}, K`;
+      case 0x15: return `LD   DT, ${V(x)}`;
+      case 0x18: return `LD   ST, ${V(x)}`;
+      case 0x1e: return `ADD  I, ${V(x)}`;
+      case 0x29: return `LD   F, ${V(x)}`;
+      case 0x33: return `LD   B, ${V(x)}`;
+      case 0x55: return `LD   [I], ${V(x)}`;
+      case 0x65: return `LD   ${V(x)}, [I]`;
+      default: return null;
+    }
+    default: return null;
+  }
+}
+const ROMS = {
+ "bounce": {
+  "title": "Odbijajaca pilka",
+  "hint": "Najprostszy przyklad - zacznij tutaj.",
+  "source": "; ============================================================\n;  ODBIJAJACA PILKA  -  najmniejszy sensowny program CHIP-8\n;  Pilka lata po ekranie i piszczy przy kazdym odbiciu.\n;\n;  Rejestry:  V0 = x   V1 = y   V2 = dx   V3 = dy   V4 = pomocniczy\n; ============================================================\n\n    LD  V0, 20          ; pozycja startowa\n    LD  V1, 8\n    LD  V2, 1           ; kierunek: 1 = w prawo, 255 = w lewo\n    LD  V3, 1           ; kierunek: 1 = w dol,   255 = w gore\n    LD  I, ball\n    DRW V0, V1, 4       ; pierwsze rysowanie - bez tego petla wymazywalaby\n                        ; pustke i zostawila duszka na pozycji startowej\n\nloop:\n    DRW V0, V1, 4       ; XOR w to samo miejsce = wymazanie pilki\n\n    ADD V0, V2          ; ruch w poziomie\n    SNE V0, 61          ; dojechala do prawej krawedzi?\n    CALL bounceX\n    SNE V0, 255         ; ...albo do lewej (0 - 1 = 255)\n    CALL bounceX\n\n    ADD V1, V3          ; ruch w pionie\n    SNE V1, 29\n    CALL bounceY\n    SNE V1, 255\n    CALL bounceY\n\n    DRW V0, V1, 4       ; rysowanie w nowym miejscu\n\n    LD  V4, 1           ; krotka pauza, zeby dalo sie to ogladac\n    LD  DT, V4\nwait:\n    LD  V4, DT\n    SE  V4, 0\n    JP  wait\n    JP  loop\n\n; --- odbicie: odwroc znak predkosci i cofnij o jeden krok --------------\nbounceX:\n    LD  V4, 0\n    SUB V4, V2          ; V4 = -dx\n    LD  V2, V4\n    ADD V0, V2\n    JP  beep\n\nbounceY:\n    LD  V4, 0\n    SUB V4, V3\n    LD  V3, V4\n    ADD V1, V3\n    JP  beep\n\nbeep:\n    LD  V4, 2\n    LD  ST, V4\n    RET\n\n; --- grafika ----------------------------------------------------------\nball:\n    gfx .##.....\n    gfx ####....\n    gfx ####....\n    gfx .##.....\n"
+ },
+ "maze": {
+  "title": "Labirynt",
+  "hint": "Losowy wzor z jednego RND. Wlacz \"DXYN czeka na klatke\" i patrz, jak sie rysuje.",
+  "source": "; ============================================================\n;  LABIRYNT  -  klasyk demosceny CHIP-8 w kilkunastu bajtach\n;\n;  Ekran dzielimy na kratke 16 x 8 komorek po 4 x 4 piksele i w kazda\n;  wrzucamy losowo jedna z dwoch ukosnych kresek. Wychodzi z tego cos,\n;  co wyglada jak labirynt - a caly \"generator\" to jeden RND.\n;\n;  Przy wlaczonym quirku \"czekaj na klatke\" widac, jak labirynt rysuje\n;  sie linia po linii - dokladnie tak, jak na prawdziwym COSMAC VIP.\n; ============================================================\n\n    LD  V0, 0           ; x w pikselach\n    LD  V1, 0           ; y w pikselach\n\nrow:\n    RND V2, 1           ; jeden losowy bit\n    SE  V2, 0\n    LD  I, slashL\n    SE  V2, 1\n    LD  I, slashR\n    DRW V0, V1, 4\n\n    ADD V0, 4\n    SE  V0, 64          ; koniec wiersza?\n    JP  row\n\n    LD  V0, 0\n    ADD V1, 4\n    SE  V1, 32          ; koniec ekranu?\n    JP  row\n\ndone:\n    LD  V2, 4\n    LD  ST, V2          ; krotki sygnal \"gotowe\"\nstop:\n    JP  stop\n\nslashL:\n    gfx #.......\n    gfx .#......\n    gfx ..#.....\n    gfx ...#....\n\nslashR:\n    gfx ...#....\n    gfx ..#.....\n    gfx .#......\n    gfx #.......\n"
+ },
+ "snake": {
+  "title": "Waz",
+  "hint": "Sterowanie 2 4 6 8 (W A D X).",
+  "source": "; ============================================================\n;  WAZ  (snake)\n;\n;  Plansza: 16 x 8 komorek po 4 x 4 piksele.\n;  Komorka pakowana w jeden bajt:  (kolumna << 4) | wiersz\n;  Cialo weza to bufor cykliczny 64 bajtow pod adresem BODY.\n;\n;  Sterowanie:  2 = gora   8 = dol   4 = lewo   6 = prawo\n;\n;  Rejestry:\n;    V0, V1 - pomocnicze          V8 - licznik petli skanujacej\n;    V2 - kolumna glowy           V9 - spakowana komorka\n;    V3 - wiersz glowy            VA - wynik\n;    V4 - kierunek (0..3)         VB - blokada skretu / flaga wzrostu\n;    V5 - indeks glowy w buforze  VC - wynik skanowania\n;    V6 - indeks ogona            VD, VE - wspolrzedne w pikselach\n;    V7 - spakowana pozycja jedzenia\n; ============================================================\n\ndefine BODY   0x400         ; bufor cykliczny 64 bajtow\ndefine RING   63            ; maska bufora\ndefine SPEED  3             ; opoznienie miedzy krokami (klatki)\ndefine MAXLEN 39            ; powyzej tego waz przestaje rosnac\n\n; ---------------------------------------------------------------- start gry\nmain:\n    CLS\n    LD  V4, 1               ; kierunek startowy: w prawo\n    LD  VA, 0               ; wynik\n    LD  V5, 0               ; indeks glowy\n    LD  V6, 0               ; indeks ogona\n    LD  V3, 4               ; wiersz\n    LD  V2, 2               ; kolumna - waz startuje jako trzy komorki\n\ninitbody:\n    CALL pack\n    LD  I, BODY\n    ADD I, V5\n    LD  V0, V9\n    LD  [I], V0\n    CALL drawbody\n    SE  V2, 4\n    JP  initstep\n    JP  initdone\ninitstep:\n    ADD V5, 1\n    ADD V2, 1\n    JP  initbody\ninitdone:\n    CALL newfood\n\n; ---------------------------------------------------------------- petla gry\nloop:\n    ; --- przesun glowe zgodnie z kierunkiem\n    SNE V4, 0\n    ADD V3, -1              ; gora\n    SNE V4, 1\n    ADD V2, 1               ; prawo\n    SNE V4, 2\n    ADD V3, 1               ; dol\n    SNE V4, 3\n    ADD V2, -1              ; lewo\n\n    ; --- sciana?  (po odjeciu 1 od zera zostaje 255, wiec SUB zlapie oba przypadki)\n    LD  V0, 15\n    SUB V0, V2\n    SE  VF, 1\n    JP  dead\n    LD  V0, 7\n    SUB V0, V3\n    SE  VF, 1\n    JP  dead\n\n    ; --- wlasny ogon?\n    CALL pack\n    CALL occupied\n    SE  VC, 0\n    JP  dead\n\n    ; --- jedzenie?\n    LD  VB, 0\n    SNE V9, V7\n    CALL eat\n\n    ; --- dopisz nowa glowe do bufora i narysuj ja\n    ADD V5, 1\n    LD  V0, RING\n    AND V5, V0\n    LD  I, BODY\n    ADD I, V5\n    LD  V0, V9\n    LD  [I], V0\n    CALL drawbody\n\n    ; --- jesli nie rosniemy, zdejmij ogon\n    SE  VB, 0\n    JP  skiptail\n    LD  I, BODY\n    ADD I, V6\n    LD  V0, [I]\n    CALL drawbody           ; ten sam sprite w to samo miejsce = wymazanie\n    ADD V6, 1\n    LD  V0, RING\n    AND V6, V0\nskiptail:\n\n    ; --- nowe jedzenie dopiero po zdjeciu ogona, zeby nie trafilo na zajete pole\n    SE  VB, 1\n    JP  nofood\n    CALL newfood\nnofood:\n\n    ; --- pauza; w tym czasie nasluchujemy klawiszy\n    LD  VB, 0               ; jeden skret na krok\n    LD  V0, SPEED\n    LD  DT, V0\nwait:\n    CALL input\n    LD  V0, DT\n    SE  V0, 0\n    JP  wait\n    JP  loop\n\n; ---------------------------------------------------------------- jedzenie\neat:\n    LD  VB, 1\n    LD  V0, V7\n    CALL drawfood           ; wymaz zjedzone\n    ADD VA, 1\n    LD  V0, 4\n    LD  ST, V0\n    LD  V0, MAXLEN\n    SUB V0, VA\n    SE  VF, 1\n    LD  VB, 0               ; osiagnieta maksymalna dlugosc - rosnij dalej wynikiem\n    RET\n\nnewfood:\n    RND V9, 0xF7            ; kolumna 0-15 w gornym nibblu, wiersz 0-7 w dolnym\n    CALL occupied\n    SE  VC, 0\n    JP  newfood\n    LD  V7, V9\n    LD  V0, V7\n    CALL drawfood\n    RET\n\n; ---------------------------------------------------------------- sterowanie\ninput:\n    SE  VB, 0               ; juz skrecalismy w tym kroku?\n    RET\n    LD  V0, 2\n    SKNP V0\n    JP  turnup\n    LD  V0, 8\n    SKNP V0\n    JP  turndown\n    LD  V0, 4\n    SKNP V0\n    JP  turnleft\n    LD  V0, 6\n    SKNP V0\n    JP  turnright\n    RET\n\nturnup:\n    SNE V4, 2               ; zawrot o 180 stopni jest ignorowany\n    RET\n    LD  V4, 0\n    LD  VB, 1\n    RET\nturnright:\n    SNE V4, 3\n    RET\n    LD  V4, 1\n    LD  VB, 1\n    RET\nturndown:\n    SNE V4, 0\n    RET\n    LD  V4, 2\n    LD  VB, 1\n    RET\nturnleft:\n    SNE V4, 1\n    RET\n    LD  V4, 3\n    LD  VB, 1\n    RET\n\n; ---------------------------------------------------------------- narzedzia\n; V2, V3  ->  V9 = (kolumna << 4) | wiersz\npack:\n    LD  V9, V2\n    SHL V9\n    SHL V9\n    SHL V9\n    SHL V9\n    OR  V9, V3\n    RET\n\n; V0 = spakowana komorka  ->  VD, VE = lewy gorny rog w pikselach\ntopixel:\n    LD  VD, V0\n    SHR VD\n    SHR VD\n    SHR VD\n    SHR VD\n    SHL VD\n    SHL VD                  ; kolumna * 4\n    LD  VE, V0\n    LD  V1, 15\n    AND VE, V1\n    SHL VE\n    SHL VE                  ; wiersz * 4\n    RET\n\ndrawbody:\n    CALL topixel\n    LD  I, sprbody\n    DRW VD, VE, 3\n    RET\n\ndrawfood:\n    CALL topixel\n    LD  I, sprfood\n    DRW VD, VE, 3\n    RET\n\n; V9 = szukana komorka  ->  VC = 1 jesli lezy na niej waz\noccupied:\n    LD  VC, 0\n    LD  V8, V6              ; od ogona...\nscanloop:\n    LD  I, BODY\n    ADD I, V8\n    LD  V0, [I]\n    SNE V0, V9\n    LD  VC, 1\n    SE  V8, V5              ; ...do glowy wlacznie\n    JP  scannext\n    RET\nscannext:\n    ADD V8, 1\n    LD  V1, RING\n    AND V8, V1\n    JP  scanloop\n\n; ---------------------------------------------------------------- koniec gry\ndead:\n    LD  V0, 16\n    LD  ST, V0\n    LD  V0, 45\n    LD  DT, V0\ndeadwait:\n    LD  V0, DT\n    SE  V0, 0\n    JP  deadwait\n\n    CLS\n    LD  I, scorebuf\n    LD  B, VA\n    LD  I, scorebuf\n    LD  V2, [I]             ; V0 = setki, V1 = dziesiatki, V2 = jednosci\n    LD  VD, 26\n    LD  VE, 13\n    LD  F, V1\n    DRW VD, VE, 5\n    ADD VD, 6\n    LD  F, V2\n    DRW VD, VE, 5\n\n    LD  V0, K               ; dowolny klawisz zaczyna od nowa\n    JP  main\n\n; ---------------------------------------------------------------- dane\nsprbody:\n    gfx ###.....\n    gfx ###.....\n    gfx ###.....\nsprfood:\n    gfx .#......\n    gfx ###.....\n    gfx .#......\nscorebuf:\n    db  0, 0, 0\n"
+ },
+ "pong": {
+  "title": "Odbijak",
+  "hint": "Paletka: 2 w gore, 8 w dol (W / X).",
+  "source": "; ============================================================\n;  ODBIJAK  (pong na jedna paletke)\n;\n;  Pilka odbija sie od trzech scian, czwarta trzeba zaslonic paletka.\n;  Trzy zycia, potem ekran z wynikiem i dowolny klawisz restartuje.\n;\n;  Sterowanie:  2 = paletka w gore   8 = paletka w dol\n;\n;  Rejestry:\n;    V0 - pomocniczy        V6 - pozycja paletki (y)\n;    V1 - blokada ruchu     V8 - wynik\n;    V2 - pilka x           V9 - zycia\n;    V3 - pilka y           VA - flaga \"nie zdazyl\"\n;    V4 - dx (2 / 254)      VD, VE - pomocnicze przy rysowaniu\n;    V5 - dy (1 / 255)\n; ============================================================\n\ndefine PADX   62            ; paletka to jedna kolumna pikseli\ndefine PADTOP 0\ndefine PADBOT 24\ndefine LIVES  3\n\nmain:\n    CLS\n    LD  V8, 0               ; wynik\n    LD  V9, LIVES\n    LD  V6, 12              ; paletka na srodku\n    CALL drawpad\n\nnewball:\n    LD  VA, 0\n    LD  V2, 8\n    LD  V3, 8\n    LD  V4, 2               ; pilka leci w prawo...\n    LD  V5, 1               ; ...i w dol\n    LD  I, sprball\n    DRW V2, V3, 2\n\nloop:\n    LD  I, sprball\n    DRW V2, V3, 2           ; wymaz pilke\n\n    ADD V2, V4\n    ADD V3, V5\n\n    SNE V3, 31              ; sufit / podloga\n    CALL flipy\n    SNE V3, 255\n    CALL flipy\n\n    SNE V2, 254             ; lewa sciana\n    CALL flipx\n\n    SNE V2, 60              ; plaszczyzna paletki\n    CALL paddle\n\n    LD  I, sprball\n    DRW V2, V3, 2           ; narysuj pilke w nowym miejscu\n\n    SE  VA, 1\n    JP  tick\n    JP  missed\n\ntick:\n    LD  V1, 0               ; jeden ruch paletki na krok\n    LD  V0, 1\n    LD  DT, V0\ntwait:\n    CALL input\n    LD  V0, DT\n    SE  V0, 0\n    JP  twait\n    JP  loop\n\n; ---------------------------------------------------------------- fizyka\nflipy:\n    LD  V0, 0\n    SUB V0, V5\n    LD  V5, V0\n    ADD V3, V5              ; cofnij o krok, juz w nowa strone\n    RET\n\nflipx:\n    LD  V0, 0\n    SUB V0, V4\n    LD  V4, V0\n    ADD V2, V4\n    RET\n\n; trafienie, gdy  y+1 >= paletka  oraz  y <= paletka+7\npaddle:\n    LD  V0, V3\n    ADD V0, 1\n    SUB V0, V6\n    SE  VF, 1\n    JP  toohigh\n    LD  V0, V6\n    ADD V0, 7\n    SUB V0, V3\n    SE  VF, 1\n    JP  toolow\n    LD  V0, 0\n    SUB V0, V4\n    LD  V4, V0\n    ADD V2, V4\n    ADD V8, 1\n    LD  V0, 2\n    LD  ST, V0\n    RET\ntoohigh:\n    LD  VA, 1\n    RET\ntoolow:\n    LD  VA, 1\n    RET\n\n; ---------------------------------------------------------------- sterowanie\ninput:\n    SE  V1, 0\n    RET\n    LD  V0, 2\n    SKNP V0\n    JP  padup\n    LD  V0, 8\n    SKNP V0\n    JP  paddown\n    RET\npadup:\n    SNE V6, PADTOP\n    RET\n    CALL drawpad            ; wymaz w starym miejscu\n    ADD V6, -2\n    CALL drawpad\n    LD  V1, 1\n    RET\npaddown:\n    SNE V6, PADBOT\n    RET\n    CALL drawpad\n    ADD V6, 2\n    CALL drawpad\n    LD  V1, 1\n    RET\n\ndrawpad:\n    LD  V0, PADX\n    LD  I, sprpad\n    DRW V0, V6, 8\n    RET\n\n; ---------------------------------------------------------------- stracone zycie\nmissed:\n    LD  V0, 12\n    LD  ST, V0\n    LD  V0, 30\n    LD  DT, V0\nmwait:\n    LD  V0, DT\n    SE  V0, 0\n    JP  mwait\n\n    ADD V9, -1\n    SE  V9, 0\n    JP  respawn\n    JP  gameover\nrespawn:\n    CLS\n    CALL drawpad\n    JP  newball\n\ngameover:\n    CLS\n    LD  I, scorebuf\n    LD  B, V8\n    LD  I, scorebuf\n    LD  V2, [I]             ; V0 = setki, V1 = dziesiatki, V2 = jednosci\n    LD  VD, 26\n    LD  VE, 13\n    LD  F, V1\n    DRW VD, VE, 5\n    ADD VD, 6\n    LD  F, V2\n    DRW VD, VE, 5\n    LD  V0, K\n    JP  main\n\n; ---------------------------------------------------------------- dane\nsprball:\n    gfx ##......\n    gfx ##......\nsprpad:\n    gfx #.......\n    gfx #.......\n    gfx #.......\n    gfx #.......\n    gfx #.......\n    gfx #.......\n    gfx #.......\n    gfx #.......\nscorebuf:\n    db  0, 0, 0\n"
+ }
+};
+
+// ===========================================================================
+//  UI
+// ===========================================================================
+const $ = (id) => document.getElementById(id);
+const QUIRK_INFO = [
+  ['vfReset',     'VF zerowane przy OR/AND/XOR', '8XY1/2/3 kasuja VF - tak robil oryginalny interpreter.'],
+  ['memoryI',     'FX55/FX65 zwiekszaja I',      'Po zapisie/odczycie rejestrow I wskazuje za ostatni bajt.'],
+  ['displayWait', 'DXYN czeka na klatke',        'Rysowanie synchronizuje sie z 60 Hz. Stad slynne miganie.'],
+  ['clipping',    'Sprite przycinany na brzegu', 'Wylaczone = sprite zawija sie na druga strone ekranu.'],
+  ['shiftVy',     'SHR/SHL przesuwaja VY',       'Wylaczone = przesuwaja VX w miejscu (wariant SUPER-CHIP).'],
+  ['jumpVx',      'BNNN skacze z VX',            'Wlaczone = BXNN z SUPER-CHIP zamiast klasycznego JP V0.'],
+];
+const PROFILES = {
+  vip:    { vfReset: true,  memoryI: true,  displayWait: true,  clipping: true,  shiftVy: true,  jumpVx: false },
+  modern: { vfReset: false, memoryI: false, displayWait: false, clipping: true,  shiftVy: false, jumpVx: false },
+};
+const KEYMAP = {
+  Digit1: 0x1, Digit2: 0x2, Digit3: 0x3, Digit4: 0xc,
+  KeyQ: 0x4, KeyW: 0x5, KeyE: 0x6, KeyR: 0xd,
+  KeyA: 0x7, KeyS: 0x8, KeyD: 0x9, KeyF: 0xe,
+  KeyZ: 0xa, KeyX: 0x0, KeyC: 0xb, KeyV: 0xf,
+};
+const PAD = [
+  [0x1, '1'], [0x2, '2'], [0x3, '3'], [0xc, '4'],
+  [0x4, 'Q'], [0x5, 'W'], [0x6, 'E'], [0xd, 'R'],
+  [0x7, 'A'], [0x8, 'S'], [0x9, 'D'], [0xe, 'F'],
+  [0xa, 'Z'], [0x0, 'X'], [0xb, 'C'], [0xf, 'V'],
+];
+
+const cpu = new Chip8({ historyLimit: 4096, seed: (Math.random() * 0xffffffff) >>> 0 });
+let running = false;
+let program = null;          // { bytes, start, symbols, lineMap }
+let labelAt = new Map();     // address -> label
+let breakpoints = new Set();
+let memBase = 0x200;
+let uiDirty = true;
+let skipBreak = false;
+
+// ---------------------------------------------------------------- rendering
+const cv = $('screen');
+const ctx = cv.getContext('2d', { alpha: false });
+const img = ctx.createImageData(SCREEN_W, SCREEN_H);
+const glowBuf = new Float32Array(SCREEN_W * SCREEN_H);
+
+function phosColor() {
+  const probe = getComputedStyle(document.documentElement).getPropertyValue('--phos').trim();
+  const d = document.createElement('canvas').getContext('2d');
+  d.fillStyle = probe; d.fillRect(0, 0, 1, 1);
+  return d.getImageData(0, 0, 1, 1).data;
+}
+let RGB = phosColor();
+
+function paint() {
+  const decay = $('glow').checked ? 0.55 : 0;
+  const px = img.data;
+  for (let i = 0; i < glowBuf.length; i++) {
+    const lit = cpu.display[i];
+    glowBuf[i] = lit ? 1 : glowBuf[i] * decay;
+    const a = glowBuf[i];
+    px[i * 4 + 0] = 8 + RGB[0] * a;
+    px[i * 4 + 1] = 10 + RGB[1] * a;
+    px[i * 4 + 2] = 14 + RGB[2] * a;
+    px[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+// ------------------------------------------------------------------- audio
+let audio = null, osc = null, gain = null;
+function initAudio() {
+  if (audio) return;
+  audio = new (window.AudioContext || window.webkitAudioContext)();
+  osc = audio.createOscillator();
+  gain = audio.createGain();
+  osc.type = 'square';
+  osc.frequency.value = 440;
+  gain.gain.value = 0;
+  osc.connect(gain).connect(audio.destination);
+  osc.start();
+}
+function updateAudio() {
+  if (!gain) return;
+  // Only sound while a clock is actually running. A paused debugger has no
+  // 60 Hz tick to drain ST, so without this a breakpoint mid-beep would hold
+  // the tone forever.
+  const clocked = running || cpu.halted;
+  const want = clocked && cpu.st > 0 && $('snd').checked ? 0.045 : 0;
+  gain.gain.setTargetAtTime(want, audio.currentTime, 0.008);
+}
+
+// -------------------------------------------------------------- main loop
+function frame() {
+  requestAnimationFrame(frame);
+  if (running) {
+    cpu.tick60();
+    const ipf = +$('speed').value;
+    for (let k = 0; k < ipf; k++) {
+      if (cpu.halted) { setRunning(false); say(`Program zatrzymany: ${cpu.haltReason || 'stop'}.`, 'ok'); break; }
+      if (breakpoints.has(cpu.pc) && !skipBreak) {
+        setRunning(false);
+        say(`Pulapka na 0x${hex(cpu.pc, 3)}. Wcisnij Uruchom, zeby isc dalej.`, 'ok');
+        break;
+      }
+      skipBreak = false;
+      try { cpu.step(); }
+      catch (err) { setRunning(false); say(`${err.message} (PC 0x${hex(err.pc ?? cpu.pc, 3)})`, 'err'); break; }
+    }
+    uiDirty = true;
+  } else if (cpu.halted && (cpu.dt > 0 || cpu.st > 0)) {
+    // A halted program is still a running machine: let its timers wind down so
+    // a closing beep ends on its own.
+    cpu.tick60();
+    uiDirty = true;
+  }
+  paint();
+  updateAudio();
+  if (uiDirty) { renderState(); uiDirty = false; }
+}
+
+function setRunning(on) {
+  running = on;
+  if (on) skipBreak = true; // don't re-trigger the breakpoint we're parked on
+  $('btnRun').innerHTML = on ? '&#10073;&#10073; Pauza' : '&#9654; Uruchom';
+  $('btnStep').disabled = on;
+  $('btnBack').disabled = on;
+  $('btnFrame').disabled = on;
+  if (on) initAudio();
+}
+
+// ------------------------------------------------------------ state panels
+function renderState() {
+  const regs = $('regs');
+  if (!regs.children.length) {
+    for (let r = 0; r < 16; r++) {
+      const el = document.createElement('div');
+      el.className = 'reg';
+      el.innerHTML = `<span>V${hex(r, 1)}</span><b>00</b>`;
+      regs.append(el);
+    }
+    for (const name of ['PC', 'I', 'SP', 'DT', 'ST', 'cykle']) {
+      const el = document.createElement('div');
+      el.className = 'reg';
+      el.innerHTML = `<span>${name}</span><b>-</b>`;
+      $('cpu').append(el);
+    }
+  }
+  for (let r = 0; r < 16; r++) {
+    const el = regs.children[r];
+    const val = hex(cpu.v[r]);
+    if (el.lastChild.textContent !== val) {
+      el.lastChild.textContent = val;
+      el.classList.add('hot');
+      setTimeout(() => el.classList.remove('hot'), 260);
+    }
+  }
+  const cells = $('cpu').children;
+  cells[0].lastChild.textContent = hex(cpu.pc, 3);
+  cells[1].lastChild.textContent = hex(cpu.i, 3);
+  cells[2].lastChild.textContent = String(cpu.sp);
+  cells[3].lastChild.textContent = hex(cpu.dt);
+  cells[4].lastChild.textContent = hex(cpu.st);
+  cells[5].lastChild.textContent = cpu.cycles.toLocaleString('pl-PL');
+
+  const notes = [];
+  if (cpu.halted) notes.push('<em>zatrzymany</em>');
+  if (cpu.waitingKey) notes.push('<em>czeka na klawisz (FX0A)</em>');
+  if (cpu.st > 0) notes.push('<em>brzeczyk</em>');
+  if (cpu.fontClobbered) notes.push('<em>program nadpisal czcionke</em>');
+  notes.push(`historia: ${cpu.history.length}`);
+  $('flags').innerHTML = notes.join(' &middot; ');
+
+  $('stack').textContent = 'Stos: ' + (cpu.sp === 0 ? '(pusty)'
+    : Array.from(cpu.stack.slice(0, cpu.sp)).map((a) => hex(a, 3)).join(' > '));
+
+  renderDisasm();
+  renderMem();
+}
+
+function renderDisasm() {
+  const rows = [];
+  const start = Math.max(0x200, cpu.pc - 12) & ~1;
+  for (let addr = start; addr < start + 44 && addr < 0xffe; addr += 2) {
+    const op = (cpu.mem[addr] << 8) | cpu.mem[addr + 1];
+    const text = disassemble(op);
+    const lbl = labelAt.get(addr);
+    rows.push(
+      `<div class="row${addr === cpu.pc ? ' pc' : ''}" data-a="${addr}">` +
+      `<span class="bp">${breakpoints.has(addr) ? '&#9679;' : ' '}</span>` +
+      `<span class="a">${hex(addr, 3)}</span><span class="b">${hex(op, 4)}</span>` +
+      `<span class="txt">${text ? esc(text) : '<span style="color:#4d5b6e">.dane</span>'}</span>` +
+      (lbl ? `<span class="lbl">; ${esc(lbl)}</span>` : '') +
+      `</div>`
+    );
+  }
+  $('disasm').innerHTML = rows.join('');
+}
+
+function renderMem() {
+  const lines = [];
+  for (let row = 0; row < 12; row++) {
+    const base = (memBase + row * 16) & 0xff0;
+    let out = `<span class="a">${hex(base, 3)}</span>  `;
+    let ascii = '';
+    for (let c = 0; c < 16; c++) {
+      const a = base + c;
+      const b = cpu.mem[a];
+      const t = hex(b);
+      out += a === cpu.pc || a === cpu.pc + 1 ? `<u>${t}</u> ` : a === cpu.i ? `<s>${t}</s> ` : `${t} `;
+      ascii += b >= 32 && b < 127 ? String.fromCharCode(b) : '.';
+    }
+    lines.push(out + ' ' + esc(ascii));
+  }
+  $('mem').innerHTML = lines.join('\n');
+}
+
+const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+function say(msg, kind = '') { const s = $('status'); s.textContent = msg; s.className = kind; }
+
+// -------------------------------------------------------------- assembling
+function buildAndLoad(autorun = true) {
+  const source = $('src').value;
+  markErrorLine(null);
+  let result;
+  try {
+    result = assemble(source);
+  } catch (err) {
+    markErrorLine(err.line ?? null);
+    say(err.message, 'err');
+    setRunning(false);
+    return false;
+  }
+  program = result;
+  labelAt = new Map();
+  for (const [name, addr] of Object.entries(result.symbols)) {
+    if (addr >= 0x200 && !labelAt.has(addr)) labelAt.set(addr, name);
+  }
+  cpu.quirks = readQuirks();
+  cpu.load(result.bytes, result.start);
+  glowBuf.fill(0);
+  memBase = result.start;
+  const used = Object.keys(result.symbols).length;
+  say(`OK - ${result.bytes.length} B od 0x${hex(result.start, 3)}, ${used} symboli.`, 'ok');
+  $('srcInfo').textContent = `${result.bytes.length} B`;
+  setRunning(autorun);
+  uiDirty = true;
+  return true;
+}
+
+function markErrorLine(line) {
+  const total = $('src').value.split('\n').length;
+  const out = [];
+  for (let n = 1; n <= total; n++) out.push(n === line ? `<b>${n}</b>` : String(n));
+  $('gutter').innerHTML = out.join('\n');
+}
+
+function readQuirks() {
+  const q = {};
+  for (const [key] of QUIRK_INFO) q[key] = $('q_' + key).checked;
+  return q;
+}
+
+// ------------------------------------------------------------------- setup
+function boot() {
+  // Browsers restore <select> values across reloads, so pin the phosphor
+  // explicitly instead of inheriting whatever was picked last time.
+  $('phos').value = 'amber';
+  document.documentElement.dataset.phos = 'amber';
+  RGB = phosColor();
+
+  // quirk checkboxes
+  $('quirks').innerHTML = QUIRK_INFO.map(([key, title, desc]) =>
+    `<label><input type="checkbox" id="q_${key}"><span>${title}<small>${desc}</small></span></label>`
+  ).join('');
+  applyProfile('vip');
+  for (const [key] of QUIRK_INFO) {
+    $('q_' + key).addEventListener('change', () => { cpu.quirks = readQuirks(); uiDirty = true; });
+  }
+  for (const btn of document.querySelectorAll('[data-profile]')) {
+    btn.addEventListener('click', () => { applyProfile(btn.dataset.profile); cpu.quirks = readQuirks(); });
+  }
+
+  // keypad
+  $('keypad').innerHTML = PAD.map(([k, phys]) =>
+    `<button data-k="${k}"><b>${hex(k, 1)}</b><i>${phys}</i></button>`
+  ).join('');
+  for (const btn of $('keypad').children) {
+    const k = +btn.dataset.k;
+    const down = (e) => { e.preventDefault(); initAudio(); cpu.keyDown(k); btn.classList.add('down'); };
+    const up = () => { cpu.keyUp(k); btn.classList.remove('down'); };
+    btn.addEventListener('pointerdown', down);
+    btn.addEventListener('pointerup', up);
+    btn.addEventListener('pointerleave', up);
+  }
+  addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); buildAndLoad(); return; }
+    const k = KEYMAP[e.code];
+    if (k === undefined || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+    e.preventDefault();
+    initAudio();
+    cpu.keyDown(k);
+    $('keypad').querySelector(`[data-k="${k}"]`)?.classList.add('down');
+  });
+  addEventListener('keyup', (e) => {
+    const k = KEYMAP[e.code];
+    if (k === undefined) return;
+    cpu.keyUp(k);
+    $('keypad').querySelector(`[data-k="${k}"]`)?.classList.remove('down');
+  });
+
+  // rom picker
+  $('romPick').innerHTML = Object.entries(ROMS)
+    .map(([id, r]) => `<option value="${id}">${r.title}</option>`).join('');
+  $('romPick').addEventListener('change', () => loadRom($('romPick').value));
+
+  // transport
+  $('btnAsm').addEventListener('click', () => buildAndLoad());
+  $('btnRun').addEventListener('click', () => {
+    if (!program) return void buildAndLoad();
+    if (cpu.halted) return say('Program dobiegl konca - wcisnij Reset albo Cofnij.', 'err');
+    setRunning(!running);
+  });
+  $('btnStep').addEventListener('click', () => { safeStep(); uiDirty = true; });
+  $('btnFrame').addEventListener('click', () => {
+    cpu.tick60();
+    for (let k = 0; k < +$('speed').value; k++) if (!safeStep()) break;
+    uiDirty = true;
+  });
+  $('btnBack').addEventListener('click', () => {
+    if (!cpu.stepBack()) say('Historia jest pusta.', 'err');
+    else say(`Cofnieto do 0x${hex(cpu.pc, 3)}.`);
+    uiDirty = true;
+  });
+  $('btnReset').addEventListener('click', () => {
+    cpu.reset((Math.random() * 0xffffffff) >>> 0);
+    glowBuf.fill(0); setRunning(false); say('Reset.'); uiDirty = true;
+  });
+  $('speed').addEventListener('input', () => { $('speedVal').textContent = $('speed').value + ' op/kl'; });
+  $('phos').addEventListener('change', () => {
+    document.documentElement.dataset.phos = $('phos').value;
+    RGB = phosColor();
+  });
+  $('btnExport').addEventListener('click', exportRom);
+
+  // debugger interactions
+  $('disasm').addEventListener('click', (e) => {
+    const row = e.target.closest('.row');
+    if (!row) return;
+    const a = +row.dataset.a;
+    breakpoints.has(a) ? breakpoints.delete(a) : breakpoints.add(a);
+    uiDirty = true;
+  });
+  $('memGo').addEventListener('change', () => {
+    const v = parseInt($('memGo').value.replace(/^0x/i, ''), 16);
+    if (!Number.isNaN(v)) { memBase = v & 0xff0; uiDirty = true; }
+  });
+  $('memPC').addEventListener('click', () => { memBase = cpu.pc & 0xff0; uiDirty = true; });
+  $('memI').addEventListener('click', () => { memBase = cpu.i & 0xff0; uiDirty = true; });
+
+  $('src').addEventListener('input', () => { markErrorLine(null); $('srcInfo').textContent = 'niezapisane'; });
+  $('src').addEventListener('scroll', () => { $('gutter').scrollTop = $('src').scrollTop; });
+
+  loadRom(Object.keys(ROMS)[0]);
+  requestAnimationFrame(frame);
+}
+
+function safeStep() {
+  try { cpu.step(); return true; }
+  catch (err) { say(`${err.message} (PC 0x${hex(err.pc ?? cpu.pc, 3)})`, 'err'); return false; }
+}
+
+function applyProfile(name) {
+  for (const [key, on] of Object.entries(PROFILES[name])) $('q_' + key).checked = on;
+}
+
+function loadRom(id) {
+  const rom = ROMS[id];
+  if (!rom) return;
+  $('src').value = rom.source;
+  $('romPick').value = id;
+  breakpoints.clear();
+  buildAndLoad(false);
+  say(`Wczytano "${rom.title}". ${rom.hint || ''}`);
+}
+
+function exportRom() {
+  if (!program) { say('Najpierw zasembluj program.', 'err'); return; }
+  const blob = new Blob([program.bytes], { type: 'application/octet-stream' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = ($('romPick').selectedOptions[0]?.textContent || 'program')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-') + '.ch8';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  say(`Zapisano ${program.bytes.length} B jako ${a.download} - dziala w kazdym emulatorze CHIP-8.`, 'ok');
+}
+
+boot();
+</script>

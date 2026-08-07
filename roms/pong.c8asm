@@ -1,0 +1,201 @@
+; ============================================================
+;  ODBIJAK  (pong na jedna paletke)
+;
+;  Pilka odbija sie od trzech scian, czwarta trzeba zaslonic paletka.
+;  Trzy zycia, potem ekran z wynikiem i dowolny klawisz restartuje.
+;
+;  Sterowanie:  2 = paletka w gore   8 = paletka w dol
+;
+;  Rejestry:
+;    V0 - pomocniczy        V6 - pozycja paletki (y)
+;    V1 - blokada ruchu     V8 - wynik
+;    V2 - pilka x           V9 - zycia
+;    V3 - pilka y           VA - flaga "nie zdazyl"
+;    V4 - dx (2 / 254)      VD, VE - pomocnicze przy rysowaniu
+;    V5 - dy (1 / 255)
+; ============================================================
+
+define PADX   62            ; paletka to jedna kolumna pikseli
+define PADTOP 0
+define PADBOT 24
+define LIVES  3
+
+main:
+    CLS
+    LD  V8, 0               ; wynik
+    LD  V9, LIVES
+    LD  V6, 12              ; paletka na srodku
+    CALL drawpad
+
+newball:
+    LD  VA, 0
+    LD  V2, 8
+    LD  V3, 8
+    LD  V4, 2               ; pilka leci w prawo...
+    LD  V5, 1               ; ...i w dol
+    LD  I, sprball
+    DRW V2, V3, 2
+
+loop:
+    LD  I, sprball
+    DRW V2, V3, 2           ; wymaz pilke
+
+    ADD V2, V4
+    ADD V3, V5
+
+    SNE V3, 31              ; sufit / podloga
+    CALL flipy
+    SNE V3, 255
+    CALL flipy
+
+    SNE V2, 254             ; lewa sciana
+    CALL flipx
+
+    SNE V2, 60              ; plaszczyzna paletki
+    CALL paddle
+
+    LD  I, sprball
+    DRW V2, V3, 2           ; narysuj pilke w nowym miejscu
+
+    SE  VA, 1
+    JP  tick
+    JP  missed
+
+tick:
+    LD  V1, 0               ; jeden ruch paletki na krok
+    LD  V0, 1
+    LD  DT, V0
+twait:
+    CALL input
+    LD  V0, DT
+    SE  V0, 0
+    JP  twait
+    JP  loop
+
+; ---------------------------------------------------------------- fizyka
+flipy:
+    LD  V0, 0
+    SUB V0, V5
+    LD  V5, V0
+    ADD V3, V5              ; cofnij o krok, juz w nowa strone
+    RET
+
+flipx:
+    LD  V0, 0
+    SUB V0, V4
+    LD  V4, V0
+    ADD V2, V4
+    RET
+
+; trafienie, gdy  y+1 >= paletka  oraz  y <= paletka+7
+paddle:
+    LD  V0, V3
+    ADD V0, 1
+    SUB V0, V6
+    SE  VF, 1
+    JP  toohigh
+    LD  V0, V6
+    ADD V0, 7
+    SUB V0, V3
+    SE  VF, 1
+    JP  toolow
+    LD  V0, 0
+    SUB V0, V4
+    LD  V4, V0
+    ADD V2, V4
+    ADD V8, 1
+    LD  V0, 2
+    LD  ST, V0
+    RET
+toohigh:
+    LD  VA, 1
+    RET
+toolow:
+    LD  VA, 1
+    RET
+
+; ---------------------------------------------------------------- sterowanie
+input:
+    SE  V1, 0
+    RET
+    LD  V0, 2
+    SKNP V0
+    JP  padup
+    LD  V0, 8
+    SKNP V0
+    JP  paddown
+    RET
+padup:
+    SNE V6, PADTOP
+    RET
+    CALL drawpad            ; wymaz w starym miejscu
+    ADD V6, -2
+    CALL drawpad
+    LD  V1, 1
+    RET
+paddown:
+    SNE V6, PADBOT
+    RET
+    CALL drawpad
+    ADD V6, 2
+    CALL drawpad
+    LD  V1, 1
+    RET
+
+drawpad:
+    LD  V0, PADX
+    LD  I, sprpad
+    DRW V0, V6, 8
+    RET
+
+; ---------------------------------------------------------------- stracone zycie
+missed:
+    LD  V0, 12
+    LD  ST, V0
+    LD  V0, 30
+    LD  DT, V0
+mwait:
+    LD  V0, DT
+    SE  V0, 0
+    JP  mwait
+
+    ADD V9, -1
+    SE  V9, 0
+    JP  respawn
+    JP  gameover
+respawn:
+    CLS
+    CALL drawpad
+    JP  newball
+
+gameover:
+    CLS
+    LD  I, scorebuf
+    LD  B, V8
+    LD  I, scorebuf
+    LD  V2, [I]             ; V0 = setki, V1 = dziesiatki, V2 = jednosci
+    LD  VD, 26
+    LD  VE, 13
+    LD  F, V1
+    DRW VD, VE, 5
+    ADD VD, 6
+    LD  F, V2
+    DRW VD, VE, 5
+    LD  V0, K
+    JP  main
+
+; ---------------------------------------------------------------- dane
+sprball:
+    gfx ##......
+    gfx ##......
+sprpad:
+    gfx #.......
+    gfx #.......
+    gfx #.......
+    gfx #.......
+    gfx #.......
+    gfx #.......
+    gfx #.......
+    gfx #.......
+scorebuf:
+    db  0, 0, 0

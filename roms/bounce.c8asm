@@ -1,0 +1,66 @@
+; ============================================================
+;  ODBIJAJACA PILKA  -  najmniejszy sensowny program CHIP-8
+;  Pilka lata po ekranie i piszczy przy kazdym odbiciu.
+;
+;  Rejestry:  V0 = x   V1 = y   V2 = dx   V3 = dy   V4 = pomocniczy
+; ============================================================
+
+    LD  V0, 20          ; pozycja startowa
+    LD  V1, 8
+    LD  V2, 1           ; kierunek: 1 = w prawo, 255 = w lewo
+    LD  V3, 1           ; kierunek: 1 = w dol,   255 = w gore
+    LD  I, ball
+    DRW V0, V1, 4       ; pierwsze rysowanie - bez tego petla wymazywalaby
+                        ; pustke i zostawila duszka na pozycji startowej
+
+loop:
+    DRW V0, V1, 4       ; XOR w to samo miejsce = wymazanie pilki
+
+    ADD V0, V2          ; ruch w poziomie
+    SNE V0, 61          ; dojechala do prawej krawedzi?
+    CALL bounceX
+    SNE V0, 255         ; ...albo do lewej (0 - 1 = 255)
+    CALL bounceX
+
+    ADD V1, V3          ; ruch w pionie
+    SNE V1, 29
+    CALL bounceY
+    SNE V1, 255
+    CALL bounceY
+
+    DRW V0, V1, 4       ; rysowanie w nowym miejscu
+
+    LD  V4, 1           ; krotka pauza, zeby dalo sie to ogladac
+    LD  DT, V4
+wait:
+    LD  V4, DT
+    SE  V4, 0
+    JP  wait
+    JP  loop
+
+; --- odbicie: odwroc znak predkosci i cofnij o jeden krok --------------
+bounceX:
+    LD  V4, 0
+    SUB V4, V2          ; V4 = -dx
+    LD  V2, V4
+    ADD V0, V2
+    JP  beep
+
+bounceY:
+    LD  V4, 0
+    SUB V4, V3
+    LD  V3, V4
+    ADD V1, V3
+    JP  beep
+
+beep:
+    LD  V4, 2
+    LD  ST, V4
+    RET
+
+; --- grafika ----------------------------------------------------------
+ball:
+    gfx .##.....
+    gfx ####....
+    gfx ####....
+    gfx .##.....

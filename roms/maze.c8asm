@@ -1,0 +1,48 @@
+; ============================================================
+;  LABIRYNT  -  klasyk demosceny CHIP-8 w kilkunastu bajtach
+;
+;  Ekran dzielimy na kratke 16 x 8 komorek po 4 x 4 piksele i w kazda
+;  wrzucamy losowo jedna z dwoch ukosnych kresek. Wychodzi z tego cos,
+;  co wyglada jak labirynt - a caly "generator" to jeden RND.
+;
+;  Przy wlaczonym quirku "czekaj na klatke" widac, jak labirynt rysuje
+;  sie linia po linii - dokladnie tak, jak na prawdziwym COSMAC VIP.
+; ============================================================
+
+    LD  V0, 0           ; x w pikselach
+    LD  V1, 0           ; y w pikselach
+
+row:
+    RND V2, 1           ; jeden losowy bit
+    SE  V2, 0
+    LD  I, slashL
+    SE  V2, 1
+    LD  I, slashR
+    DRW V0, V1, 4
+
+    ADD V0, 4
+    SE  V0, 64          ; koniec wiersza?
+    JP  row
+
+    LD  V0, 0
+    ADD V1, 4
+    SE  V1, 32          ; koniec ekranu?
+    JP  row
+
+done:
+    LD  V2, 4
+    LD  ST, V2          ; krotki sygnal "gotowe"
+stop:
+    JP  stop
+
+slashL:
+    gfx #.......
+    gfx .#......
+    gfx ..#.....
+    gfx ...#....
+
+slashR:
+    gfx ...#....
+    gfx ..#.....
+    gfx .#......
+    gfx #.......

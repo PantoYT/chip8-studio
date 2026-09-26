@@ -1,117 +1,119 @@
 # CHIP-8 Studio
 
-Emulator, asembler, deasembler i debugger CHIP-8 w **jednym pliku HTML**, ktory
-dziala offline z `file://` — bez serwera, bez internetu, bez zadnej zaleznosci.
+A CHIP-8 emulator, assembler, disassembler and debugger in **one HTML file** that works
+offline from `file://` — no server, no internet, no dependencies.
 
 ```bash
-node tests/run.js     # 49 testow: CPU, quirki, asembler, deasembler, ROM-y
+node tests/run.js     # 49 tests: CPU, quirks, assembler, disassembler, ROMs
 node tools/build.js   # -> dist/studio.html  +  dist/*.ch8
 ```
 
-Potem po prostu otworz `dist/studio.html` w przegladarce.
+Then just open `dist/studio.html` in a browser.
 
 ---
 
-## Co to jest CHIP-8
+## What CHIP-8 is
 
-CHIP-8 to interpretowany jezyk stworzony okolo 1977 przez **Josepha Weisbeckera**
-z RCA dla mikrokomputera **COSMAC VIP** (procesor RCA 1802). Nie byl to procesor
-sprzetowy, tylko maszyna wirtualna — dzieki temu gry dalo sie pisac raz i
-uruchamiac na kazdej maszynie, ktora miala interpreter. Cala specyfikacja to:
+CHIP-8 is an interpreted language created around 1977 by **Joseph Weisbecker** at RCA
+for the **COSMAC VIP** microcomputer (RCA 1802 CPU). It wasn't a hardware processor but a
+virtual machine — so games could be written once and run on any machine with an
+interpreter. The whole specification is:
 
-| element        | rozmiar                                        |
+| Element        | Size                                           |
 |----------------|------------------------------------------------|
-| pamiec         | 4 KB, program startuje pod `0x200`             |
-| rejestry       | `V0`–`VF` (8-bit), `I` (12-bit adresowy)       |
-| stos           | 16 poziomow, tylko na adresy powrotu           |
-| ekran          | 64 × 32, monochromatyczny, sprite'y rysowane XOR |
-| timery         | dwa, 60 Hz: opoznienia (`DT`) i dzwieku (`ST`) |
-| dzwiek         | jeden ton, gra dopoki `ST > 0`                 |
-| klawiatura     | 16 klawiszy `0`–`F`                            |
-| lista rozkazow | 35 instrukcji, kazda 2 bajty                   |
+| memory         | 4 KB, programs start at `0x200`                |
+| registers      | `V0`–`VF` (8-bit), `I` (12-bit address)        |
+| stack          | 16 levels, return addresses only               |
+| screen         | 64 × 32, monochrome, sprites drawn with XOR    |
+| timers         | two, 60 Hz: delay (`DT`) and sound (`ST`)      |
+| sound          | a single tone, plays while `ST > 0`            |
+| keypad         | 16 keys `0`–`F`                                |
+| instruction set| 35 instructions, 2 bytes each                  |
 
-Tyle. Dlatego calkiem grywalny waz miesci sie w **385 bajtach**.
+That's it. Which is why a quite playable snake fits in **385 bytes**.
 
-### Skad biora sie „quirki”
+### Where the "quirks" come from
 
-Interpretery pisali rozni ludzie na rozne maszyny i kilka instrukcji rozjechalo
-sie miedzy wersjami. Nie ma jednego „poprawnego” CHIP-8 — jest oryginalny COSMAC
-VIP, jest SUPER-CHIP z kalkulatorow HP-48, i sa nowsze porty. Studio ma je jako
-przelaczniki (`Quirki interpretera`), bo to jedyny sposob, zeby stare ROM-y
-z internetu dzialaly poprawnie:
+Interpreters were written by different people for different machines, and a few
+instructions drifted apart between versions. There's no single "correct" CHIP-8 — there
+is the original COSMAC VIP, SUPER-CHIP from the HP-48 calculators, and newer ports. The
+Studio has them as toggles (`Quirki interpretera` — interpreter quirks), because that's
+the only way to make old ROMs from the internet run correctly:
 
-- **`8XY1/2/3` zeruja `VF`** — oryginal tak robil, pozniejsze porty nie.
-- **`FX55/FX65` zwiekszaja `I`** — po zapisie rejestrow `I` wskazywalo dalej.
-- **`DXYN` czeka na klatke** — na VIP rysowanie synchronizowalo sie z obrazem.
-  Stad slynne miganie CHIP-8: praktyczny limit to ~1 sprite na klatke.
-- **przycinanie sprite'ow** na brzegu ekranu zamiast zawijania.
-- **`8XY6/8XYE`** przesuwaja `VY` (oryginal) albo `VX` w miejscu (SUPER-CHIP).
-- **`BNNN`** skacze z `V0` (oryginal) albo z `VX` (SUPER-CHIP).
+- **`8XY1/2/3` reset `VF`** — the original did, later ports don't.
+- **`FX55/FX65` increment `I`** — after storing registers, `I` pointed further on.
+- **`DXYN` waits for the frame** — on the VIP drawing was synchronized with the display.
+  Hence the famous CHIP-8 flicker: the practical limit is ~1 sprite per frame.
+- **Sprite clipping** at the screen edge instead of wrapping.
+- **`8XY6/8XYE`** shift `VY` (original) or `VX` in place (SUPER-CHIP).
+- **`BNNN`** jumps from `V0` (original) or from `VX` (SUPER-CHIP).
 
-Profil `COSMAC VIP` ustawia wszystko po staremu, `Nowoczesny` po nowemu.
+The `COSMAC VIP` profile sets everything the old way, `Nowoczesny` (modern) the new way.
 
 ---
 
-## Zawartosc
+## Contents
 
 ```
-src/chip8.js      rdzen emulatora: 35 instrukcji, timery, quirki, historia
-src/asm.js        asembler dwuprzebiegowy + deasembler
-roms/*.c8asm      cztery programy napisane w asemblerze CHIP-8
-web/studio.html   interfejs (szablon; build wstrzykuje rdzen i ROM-y)
-tools/build.js    sklejacz -> dist/studio.html
-tools/c8asm.js    asembler z linii polecen: .c8asm -> .ch8
-tools/play.js     odtwarzacz headless: renderuje ekran jako tekst
-tests/run.js      testy
+src/chip8.js      emulator core: 35 instructions, timers, quirks, history
+src/asm.js        two-pass assembler + disassembler
+roms/*.c8asm      four programs written in CHIP-8 assembly
+web/studio.html   the interface (template; the build injects the core and ROMs)
+tools/build.js    bundler -> dist/studio.html
+tools/c8asm.js    command-line assembler: .c8asm -> .ch8
+tools/play.js     headless player: renders the screen as text
+tests/run.js      tests
 ```
 
 ## Studio
 
-- ekran z poswiata luminoforu (cztery kolory) i liniami CRT,
-- **debugger z cofaniem czasu** — `Cofnij` odtwarza pelny stan sprzed instrukcji
-  (rejestry, pamiec, ekran); bufor trzyma 4096 krokow,
-- pulapki: klikniecie linii w deasemblerze,
-- podglad pamieci z podswietlonym `PC` i `I`,
-- edytor zrodla — `Ctrl+Enter` asembluje i uruchamia, bledy pokazuja numer linii,
-- `Pobierz .ch8` zapisuje plik, ktory chodzi w **dowolnym** emulatorze CHIP-8.
+- a screen with phosphor glow (four colors) and CRT lines,
+- **a time-travel debugger** — `Cofnij` (undo) restores the full state from before an
+  instruction (registers, memory, screen); the buffer holds 4096 steps,
+- breakpoints: click a line in the disassembler,
+- a memory view with `PC` and `I` highlighted,
+- a source editor — `Ctrl+Enter` assembles and runs, errors show the line number,
+- `Pobierz .ch8` (download) saves a file that runs in **any** CHIP-8 emulator.
 
-## Jezyk asemblera
+The interface labels are in Polish.
+
+## Assembly language
 
 ```asm
-define WIDTH 8              ; stala
-    org 0x200               ; adres skladania
+define WIDTH 8              ; constant
+    org 0x200               ; assembly address
 start:
-    LD  V0, WIDTH * 2       ; wyrazenia: + - * / ( ) na etykietach i stalych
+    LD  V0, WIDTH * 2       ; expressions: + - * / ( ) on labels and constants
     LD  I, sprite
     DRW V0, V1, 4
     JP  start
 sprite:
-    gfx .####...             ; grafika wprost, '.' = 0, reszta = 1
+    gfx .####...             ; graphics inline, '.' = 0, anything else = 1
     gfx ####....
-    db  0xFF, 0b1010, 'A'   ; liczby: 42, 0xFF, $FF, 0b1010, %1010, 'A'
-    dw  start               ; slowo big-endian
+    db  0xFF, 0b1010, 'A'   ; numbers: 42, 0xFF, $FF, 0b1010, %1010, 'A'
+    dw  start               ; big-endian word
 ```
 
-Wszystkie 35 instrukcji w skladni Cowgoda (`LD`, `DRW`, `SKNP`, `SUBN`, …).
-`SHR V3` / `SHL V3` z jednym argumentem skladaja sie do `8XX6`/`8XXE`, czyli
-znacza to samo niezaleznie od ustawienia quirka przesuniec.
+All 35 instructions in Cowgod's syntax (`LD`, `DRW`, `SKNP`, `SUBN`, …).
+`SHR V3` / `SHL V3` with a single argument assemble to `8XX6`/`8XXE`, so they mean the
+same thing regardless of the shift quirk setting.
 
-## ROM-y
+## ROMs
 
-| plik              | rozmiar | co robi |
+| File              | Size    | What it does |
 |-------------------|---------|---------|
-| `bounce.c8asm`    |  78 B   | pilka odbijajaca sie od scian, pisk przy odbiciu |
-| `maze.c8asm`      |  44 B   | losowy labirynt z jednego `RND` |
-| `snake.c8asm`     | 385 B   | waz: bufor cykliczny, kolizje, wynik, restart |
-| `pong.c8asm`      | 261 B   | odbijak na jedna paletke, trzy zycia |
+| `bounce.c8asm`    |  78 B   | a ball bouncing off the walls, beeps on bounce |
+| `maze.c8asm`      |  44 B   | a random maze from a single `RND` |
+| `snake.c8asm`     | 385 B   | snake: ring buffer, collisions, score, restart |
+| `pong.c8asm`      | 261 B   | single-paddle bouncer, three lives |
 
-Sterowanie w grach: **2 = gora, 8 = dol, 4 = lewo, 6 = prawo**
-(na klawiaturze `W`, `X`, `Q`… wedlug mapy `1234/QWER/ASDF/ZXCV`).
+Game controls: **2 = up, 8 = down, 4 = left, 6 = right**
+(on a keyboard `W`, `X`, `Q`… following the `1234/QWER/ASDF/ZXCV` map).
 
-## Granie bez przegladarki
+## Playing without a browser
 
-`tools/play.js` uruchamia ROM w Node i rysuje ekran znakami polblokowymi.
-Klawisze mozna podac skryptem albo oddac sterowanie botowi:
+`tools/play.js` runs a ROM in Node and draws the screen with half-block characters. Keys
+can be scripted or control can be handed to a bot:
 
 ```bash
 node tools/play.js roms/maze.c8asm  --frames 400 --shots 400
@@ -119,37 +121,37 @@ node tools/play.js roms/pong.c8asm  --frames 200 --shots 90 --keys 40:8:60
 node tools/play.js roms/snake.c8asm --frames 1400 --bot snake --shots 300,800,1400
 ```
 
-`--keys` przyjmuje `klatka:klawiszHex:iloscKlatek`. Bot do weza czyta stan
-emulatora tak, jak robi to skrypt TAS: glowa siedzi w `V2`/`V3`, jedzenie w `V7`,
-cialo w buforze pod `0x400`.
+`--keys` takes `frame:hexKey:frameCount`. The snake bot reads the emulator state the way
+a TAS script does: the head lives in `V2`/`V3`, the food in `V7`, the body in the buffer
+at `0x400`.
 
-### Gra na tury
+### Turn-based play
 
-`--session <plik>` zapisuje caly stan maszyny (pamiec, rejestry, ekran, stan
-generatora losowego) i wczytuje go przy nastepnym wywolaniu. Dzieki temu mozna
-grac recznie: obejrzec ekran, zdecydowac, wykonac jeden ruch, obejrzec znowu.
+`--session <file>` saves the whole machine state (memory, registers, screen, RNG state)
+and loads it on the next call. That makes manual play possible: look at the screen,
+decide, make one move, look again.
 
 ```bash
 node tools/play.js roms/snake.c8asm --session save.json --frames 30 --shots 30
 node tools/play.js roms/snake.c8asm --session save.json --press 2 --ipf 20 --frames 20 --shots 20
 ```
 
-`--press` trzyma podany klawisz przez cala serie klatek. Kopia pliku sesji dziala
-jak save state — mozna wrocic przed nieudany skret.
+`--press` holds the given key for the whole series of frames. A copy of the session file
+works like a save state — you can go back before a bad turn.
 
-Uwaga praktyczna: ROM czyta klawiature tylko w swoim oknie oczekiwania na koncu
-kroku. Jesli seria klatek skonczy sie w srodku kroku, pierwszy ruch nastepnej
-serii pojedzie jeszcze starym kierunkiem — dokladnie tak, jakby nacisnac
-strzalke ulamek sekundy za pozno. Przy dluzszych seriach problem znika.
+A practical note: the ROM reads the keypad only in its wait window at the end of a step.
+If a series of frames ends mid-step, the first move of the next series still goes in the
+old direction — exactly as if you pressed the arrow a split second too late. With longer
+series the problem disappears.
 
-Poniewaz sprite'y rysuje sie XOR-em, ROM ktory najpierw wymazuje, a potem rysuje,
-przez czesc kazdej klatki jest pusty. Odtwarzacz nakłada trzy ostatnie klatki na
-siebie (jak poswiata luminoforu), zeby zrzut pokazywal to, co widzi czlowiek.
+Because sprites are drawn with XOR, a ROM that first erases and then draws is blank for
+part of every frame. The player overlays the last three frames (like phosphor
+persistence) so the screenshot shows what a human sees.
 
-## Uwagi o wiernosci
+## Notes on accuracy
 
-- `FX0A` czeka na **wcisniecie i puszczenie** klawisza, tak jak na VIP.
-- `RND` chodzi z ziarna (xorshift32), wiec testy sa powtarzalne.
-- Skok pod wlasny adres (`JP` w to samo miejsce) jest wykrywany jako koniec
-  programu — timery dalej tykaja, zeby koncowy pisk sam ucichl.
-- Zapis w obszar czcionki jest sygnalizowany w panelu stanu.
+- `FX0A` waits for a key **press and release**, as on the VIP.
+- `RND` runs from a seed (xorshift32), so the tests are reproducible.
+- A jump to its own address (`JP` to the same place) is detected as the end of the
+  program — the timers keep ticking so the final beep fades out by itself.
+- Writes into the font area are flagged in the status panel.

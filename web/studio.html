@@ -1,3 +1,5 @@
+<!doctype html>
+<html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CHIP-8 Studio</title>
@@ -169,68 +171,68 @@ textarea#src {
 
 <header>
   <h1>CHIP&#8209;8 <span>Studio</span></h1>
-  <select id="romPick" title="Wybierz program"></select>
-  <button id="btnAsm" class="primary">Asembluj &amp; uruchom <small style="color:var(--dim)">Ctrl+&crarr;</small></button>
+  <select id="romPick" title="Pick a program"></select>
+  <button id="btnAsm" class="primary">Assemble &amp; run <small style="color:var(--dim)">Ctrl+&crarr;</small></button>
   <div class="spacer"></div>
-  <label class="slider">luminofor
+  <label class="slider">phosphor
     <select id="phos">
-      <option value="green">zielony</option>
-      <option value="amber">bursztyn</option>
-      <option value="ice">lod</option>
-      <option value="paper">biel</option>
+      <option value="green">green</option>
+      <option value="amber">amber</option>
+      <option value="ice">ice</option>
+      <option value="paper">paper</option>
     </select>
   </label>
-  <button id="btnExport">Pobierz .ch8</button>
+  <button id="btnExport">Download .ch8</button>
 </header>
 
 <main>
-  <!-- ------------------------------------------------------------ EDYTOR -->
+  <!-- ------------------------------------------------------------ EDITOR -->
   <section>
     <div class="pane" style="flex:1">
-      <h2>Zrodlo <span class="spacer"></span><span id="srcInfo"></span></h2>
+      <h2>Source <span class="spacer"></span><span id="srcInfo"></span></h2>
       <div class="editor-wrap">
         <div class="gutter" id="gutter"></div>
         <textarea id="src" spellcheck="false" autocomplete="off"></textarea>
       </div>
-      <div id="status">Gotowy.</div>
+      <div id="status">Ready.</div>
     </div>
     <div class="pane">
-      <h2>Quirki interpretera</h2>
+      <h2>Interpreter quirks</h2>
       <div class="body">
         <div style="display:flex;gap:6px;margin-bottom:10px">
           <button data-profile="vip">COSMAC VIP</button>
-          <button data-profile="modern">Nowoczesny</button>
+          <button data-profile="modern">Modern</button>
         </div>
         <div class="quirks" id="quirks"></div>
       </div>
     </div>
   </section>
 
-  <!-- ------------------------------------------------------------- EKRAN -->
+  <!-- ------------------------------------------------------------ SCREEN -->
   <section>
     <div class="stage">
       <div class="crt"><canvas id="screen" width="64" height="32"></canvas></div>
 
       <div class="transport">
-        <button id="btnRun" class="primary">&#9654; Uruchom</button>
-        <button id="btnStep">&#8677; Krok</button>
-        <button id="btnBack">&#8676; Cofnij</button>
-        <button id="btnFrame">Klatka</button>
+        <button id="btnRun" class="primary">&#9654; Run</button>
+        <button id="btnStep">&#8677; Step</button>
+        <button id="btnBack">&#8676; Back</button>
+        <button id="btnFrame">Frame</button>
         <button id="btnReset">&#8635; Reset</button>
         <div class="sep"></div>
-        <label class="slider">tempo
+        <label class="slider">speed
           <input type="range" id="speed" min="1" max="60" value="12">
-          <b id="speedVal" style="color:var(--ink);width:5.5em">12 op/kl</b>
+          <b id="speedVal" style="color:var(--ink);width:5.5em">12 op/frame</b>
         </label>
         <div class="sep"></div>
-        <label class="slider"><input type="checkbox" id="glow" checked> poswiata</label>
-        <label class="slider"><input type="checkbox" id="snd" checked> dzwiek</label>
+        <label class="slider"><input type="checkbox" id="glow" checked> glow</label>
+        <label class="slider"><input type="checkbox" id="snd" checked> sound</label>
       </div>
 
       <div class="keypad" id="keypad"></div>
       <div style="color:var(--dim);font-size:11px;text-align:center;max-width:520px">
-        Klawiatura fizyczna: <b style="color:var(--ink)">1234 / QWER / ASDF / ZXCV</b>.
-        W wazu i odbijaku steruj <b style="color:var(--ink)">2 4 6 8</b> (W A D X na klawiaturze).
+        Keyboard: <b style="color:var(--ink)">1234 / QWER / ASDF / ZXCV</b>.
+        Snake and Pong steer with <b style="color:var(--ink)">2 4 6 8</b> (W A D X on the keyboard).
       </div>
     </div>
   </section>
@@ -238,7 +240,7 @@ textarea#src {
   <!-- --------------------------------------------------------- DEBUGGER -->
   <section>
     <div class="pane">
-      <h2>Rejestry</h2>
+      <h2>Registers</h2>
       <div class="body">
         <div class="regs" id="regs"></div>
         <div class="cpu" id="cpu"></div>
@@ -248,14 +250,14 @@ textarea#src {
     </div>
 
     <div class="pane" style="flex:1.4">
-      <h2>Deasembler <span class="spacer"></span>
-        <span style="color:var(--dim);font-weight:400;text-transform:none;letter-spacing:0">klik = pulapka</span>
+      <h2>Disassembler <span class="spacer"></span>
+        <span style="color:var(--dim);font-weight:400;text-transform:none;letter-spacing:0">click = breakpoint</span>
       </h2>
       <div class="body" id="disasm"></div>
     </div>
 
     <div class="pane" style="flex:1">
-      <h2>Pamiec <span class="spacer"></span>
+      <h2>Memory <span class="spacer"></span>
         <input type="text" id="memGo" placeholder="0x200" size="6" style="padding:1px 6px">
         <button id="memPC">PC</button><button id="memI">I</button>
       </h2>
@@ -273,12 +275,12 @@ textarea#src {
 // ===========================================================================
 const $ = (id) => document.getElementById(id);
 const QUIRK_INFO = [
-  ['vfReset',     'VF zerowane przy OR/AND/XOR', '8XY1/2/3 kasuja VF - tak robil oryginalny interpreter.'],
-  ['memoryI',     'FX55/FX65 zwiekszaja I',      'Po zapisie/odczycie rejestrow I wskazuje za ostatni bajt.'],
-  ['displayWait', 'DXYN czeka na klatke',        'Rysowanie synchronizuje sie z 60 Hz. Stad slynne miganie.'],
-  ['clipping',    'Sprite przycinany na brzegu', 'Wylaczone = sprite zawija sie na druga strone ekranu.'],
-  ['shiftVy',     'SHR/SHL przesuwaja VY',       'Wylaczone = przesuwaja VX w miejscu (wariant SUPER-CHIP).'],
-  ['jumpVx',      'BNNN skacze z VX',            'Wlaczone = BXNN z SUPER-CHIP zamiast klasycznego JP V0.'],
+  ['vfReset',     'VF reset by OR/AND/XOR',      '8XY1/2/3 clear VF, as the original interpreter did.'],
+  ['memoryI',     'FX55/FX65 advance I',         'After storing or loading registers, I points past the last byte.'],
+  ['displayWait', 'DXYN waits for the frame',    'Drawing syncs to 60 Hz. Hence the famous flicker.'],
+  ['clipping',    'Sprites clip at the edge',    'Off = a sprite wraps around to the other side of the screen.'],
+  ['shiftVy',     'SHR/SHL shift VY',            'Off = they shift VX in place (the SUPER-CHIP variant).'],
+  ['jumpVx',      'BNNN jumps from VX',          'On = SUPER-CHIP BXNN instead of the classic JP V0.'],
 ];
 const PROFILES = {
   vip:    { vfReset: true,  memoryI: true,  displayWait: true,  clipping: true,  shiftVy: true,  jumpVx: false },
@@ -365,10 +367,10 @@ function frame() {
     cpu.tick60();
     const ipf = +$('speed').value;
     for (let k = 0; k < ipf; k++) {
-      if (cpu.halted) { setRunning(false); say(`Program zatrzymany: ${cpu.haltReason || 'stop'}.`, 'ok'); break; }
+      if (cpu.halted) { setRunning(false); say(`Program stopped: ${cpu.haltReason || 'stop'}.`, 'ok'); break; }
       if (breakpoints.has(cpu.pc) && !skipBreak) {
         setRunning(false);
-        say(`Pulapka na 0x${hex(cpu.pc, 3)}. Wcisnij Uruchom, zeby isc dalej.`, 'ok');
+        say(`Breakpoint at 0x${hex(cpu.pc, 3)}. Press Run to go on.`, 'ok');
         break;
       }
       skipBreak = false;
@@ -390,7 +392,7 @@ function frame() {
 function setRunning(on) {
   running = on;
   if (on) skipBreak = true; // don't re-trigger the breakpoint we're parked on
-  $('btnRun').innerHTML = on ? '&#10073;&#10073; Pauza' : '&#9654; Uruchom';
+  $('btnRun').innerHTML = on ? '&#10073;&#10073; Pause' : '&#9654; Run';
   $('btnStep').disabled = on;
   $('btnBack').disabled = on;
   $('btnFrame').disabled = on;
@@ -407,7 +409,7 @@ function renderState() {
       el.innerHTML = `<span>V${hex(r, 1)}</span><b>00</b>`;
       regs.append(el);
     }
-    for (const name of ['PC', 'I', 'SP', 'DT', 'ST', 'cykle']) {
+    for (const name of ['PC', 'I', 'SP', 'DT', 'ST', 'cycles']) {
       const el = document.createElement('div');
       el.className = 'reg';
       el.innerHTML = `<span>${name}</span><b>-</b>`;
@@ -429,17 +431,17 @@ function renderState() {
   cells[2].lastChild.textContent = String(cpu.sp);
   cells[3].lastChild.textContent = hex(cpu.dt);
   cells[4].lastChild.textContent = hex(cpu.st);
-  cells[5].lastChild.textContent = cpu.cycles.toLocaleString('pl-PL');
+  cells[5].lastChild.textContent = cpu.cycles.toLocaleString('en-US');
 
   const notes = [];
-  if (cpu.halted) notes.push('<em>zatrzymany</em>');
-  if (cpu.waitingKey) notes.push('<em>czeka na klawisz (FX0A)</em>');
-  if (cpu.st > 0) notes.push('<em>brzeczyk</em>');
-  if (cpu.fontClobbered) notes.push('<em>program nadpisal czcionke</em>');
-  notes.push(`historia: ${cpu.history.length}`);
+  if (cpu.halted) notes.push('<em>stopped</em>');
+  if (cpu.waitingKey) notes.push('<em>waiting for a key (FX0A)</em>');
+  if (cpu.st > 0) notes.push('<em>buzzer</em>');
+  if (cpu.fontClobbered) notes.push('<em>the program overwrote the font</em>');
+  notes.push(`history: ${cpu.history.length}`);
   $('flags').innerHTML = notes.join(' &middot; ');
 
-  $('stack').textContent = 'Stos: ' + (cpu.sp === 0 ? '(pusty)'
+  $('stack').textContent = 'Stack: ' + (cpu.sp === 0 ? '(empty)'
     : Array.from(cpu.stack.slice(0, cpu.sp)).map((a) => hex(a, 3)).join(' > '));
 
   renderDisasm();
@@ -457,7 +459,7 @@ function renderDisasm() {
       `<div class="row${addr === cpu.pc ? ' pc' : ''}" data-a="${addr}">` +
       `<span class="bp">${breakpoints.has(addr) ? '&#9679;' : ' '}</span>` +
       `<span class="a">${hex(addr, 3)}</span><span class="b">${hex(op, 4)}</span>` +
-      `<span class="txt">${text ? esc(text) : '<span style="color:#4d5b6e">.dane</span>'}</span>` +
+      `<span class="txt">${text ? esc(text) : '<span style="color:#4d5b6e">.data</span>'}</span>` +
       (lbl ? `<span class="lbl">; ${esc(lbl)}</span>` : '') +
       `</div>`
     );
@@ -509,7 +511,7 @@ function buildAndLoad(autorun = true) {
   glowBuf.fill(0);
   memBase = result.start;
   const used = Object.keys(result.symbols).length;
-  say(`OK - ${result.bytes.length} B od 0x${hex(result.start, 3)}, ${used} symboli.`, 'ok');
+  say(`OK - ${result.bytes.length} B from 0x${hex(result.start, 3)}, ${used} symbols.`, 'ok');
   $('srcInfo').textContent = `${result.bytes.length} B`;
   setRunning(autorun);
   uiDirty = true;
@@ -586,7 +588,7 @@ function boot() {
   $('btnAsm').addEventListener('click', () => buildAndLoad());
   $('btnRun').addEventListener('click', () => {
     if (!program) return void buildAndLoad();
-    if (cpu.halted) return say('Program dobiegl konca - wcisnij Reset albo Cofnij.', 'err');
+    if (cpu.halted) return say('The program has ended - press Reset or Back.', 'err');
     setRunning(!running);
   });
   $('btnStep').addEventListener('click', () => { safeStep(); uiDirty = true; });
@@ -596,15 +598,15 @@ function boot() {
     uiDirty = true;
   });
   $('btnBack').addEventListener('click', () => {
-    if (!cpu.stepBack()) say('Historia jest pusta.', 'err');
-    else say(`Cofnieto do 0x${hex(cpu.pc, 3)}.`);
+    if (!cpu.stepBack()) say('The history is empty.', 'err');
+    else say(`Back to 0x${hex(cpu.pc, 3)}.`);
     uiDirty = true;
   });
   $('btnReset').addEventListener('click', () => {
     cpu.reset((Math.random() * 0xffffffff) >>> 0);
     glowBuf.fill(0); setRunning(false); say('Reset.'); uiDirty = true;
   });
-  $('speed').addEventListener('input', () => { $('speedVal').textContent = $('speed').value + ' op/kl'; });
+  $('speed').addEventListener('input', () => { $('speedVal').textContent = $('speed').value + ' op/frame'; });
   $('phos').addEventListener('change', () => {
     document.documentElement.dataset.phos = $('phos').value;
     RGB = phosColor();
@@ -626,7 +628,7 @@ function boot() {
   $('memPC').addEventListener('click', () => { memBase = cpu.pc & 0xff0; uiDirty = true; });
   $('memI').addEventListener('click', () => { memBase = cpu.i & 0xff0; uiDirty = true; });
 
-  $('src').addEventListener('input', () => { markErrorLine(null); $('srcInfo').textContent = 'niezapisane'; });
+  $('src').addEventListener('input', () => { markErrorLine(null); $('srcInfo').textContent = 'not assembled'; });
   $('src').addEventListener('scroll', () => { $('gutter').scrollTop = $('src').scrollTop; });
 
   loadRom(Object.keys(ROMS)[0]);
@@ -649,11 +651,11 @@ function loadRom(id) {
   $('romPick').value = id;
   breakpoints.clear();
   buildAndLoad(false);
-  say(`Wczytano "${rom.title}". ${rom.hint || ''}`);
+  say(`Loaded "${rom.title}". ${rom.hint || ''}`);
 }
 
 function exportRom() {
-  if (!program) { say('Najpierw zasembluj program.', 'err'); return; }
+  if (!program) { say('Assemble the program first.', 'err'); return; }
   const blob = new Blob([program.bytes], { type: 'application/octet-stream' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -661,7 +663,7 @@ function exportRom() {
     .toLowerCase().replace(/[^a-z0-9]+/g, '-') + '.ch8';
   a.click();
   URL.revokeObjectURL(a.href);
-  say(`Zapisano ${program.bytes.length} B jako ${a.download} - dziala w kazdym emulatorze CHIP-8.`, 'ok');
+  say(`Saved ${program.bytes.length} B as ${a.download} - it runs in any CHIP-8 emulator.`, 'ok');
 }
 
 boot();

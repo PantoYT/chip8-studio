@@ -1,19 +1,19 @@
 ; ============================================================
-;  LABIRYNT  -  klasyk demosceny CHIP-8 w kilkunastu bajtach
+;  MAZE  -  a CHIP-8 demoscene classic in a few dozen bytes
 ;
-;  Ekran dzielimy na kratke 16 x 8 komorek po 4 x 4 piksele i w kazda
-;  wrzucamy losowo jedna z dwoch ukosnych kresek. Wychodzi z tego cos,
-;  co wyglada jak labirynt - a caly "generator" to jeden RND.
+;  The screen is split into a 16 x 8 grid of 4 x 4 pixel cells, and each
+;  one gets one of two diagonal strokes at random. The result looks like
+;  a maze - and the whole "generator" is one RND.
 ;
-;  Przy wlaczonym quirku "czekaj na klatke" widac, jak labirynt rysuje
-;  sie linia po linii - dokladnie tak, jak na prawdziwym COSMAC VIP.
+;  With the "DXYN waits for the frame" quirk on, the maze draws line by
+;  line - exactly as it did on a real COSMAC VIP.
 ; ============================================================
 
-    LD  V0, 0           ; x w pikselach
-    LD  V1, 0           ; y w pikselach
+    LD  V0, 0           ; x in pixels
+    LD  V1, 0           ; y in pixels
 
 row:
-    RND V2, 1           ; jeden losowy bit
+    RND V2, 1           ; one random bit
     SE  V2, 0
     LD  I, slashL
     SE  V2, 1
@@ -21,17 +21,17 @@ row:
     DRW V0, V1, 4
 
     ADD V0, 4
-    SE  V0, 64          ; koniec wiersza?
+    SE  V0, 64          ; end of the row?
     JP  row
 
     LD  V0, 0
     ADD V1, 4
-    SE  V1, 32          ; koniec ekranu?
+    SE  V1, 32          ; end of the screen?
     JP  row
 
 done:
     LD  V2, 4
-    LD  ST, V2          ; krotki sygnal "gotowe"
+    LD  ST, V2          ; a short "done" beep
 stop:
     JP  stop
 

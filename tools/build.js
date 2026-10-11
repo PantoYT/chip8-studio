@@ -17,10 +17,10 @@ const inline = (src) => src
   .trimEnd();
 
 const TITLES = {
-  bounce: ['Odbijajaca pilka', 'Najprostszy przyklad - zacznij tutaj.'],
-  maze:   ['Labirynt', 'Losowy wzor z jednego RND. Wlacz "DXYN czeka na klatke" i patrz, jak sie rysuje.'],
-  snake:  ['Waz', 'Sterowanie 2 4 6 8 (W A D X).'],
-  pong:   ['Odbijak', 'Paletka: 2 w gore, 8 w dol (W / X).'],
+  bounce: ['Bouncing ball', 'The simplest example - start here.'],
+  maze:   ['Maze', 'A random pattern from one RND. Turn on "DXYN waits for the frame" and watch it draw.'],
+  snake:  ['Snake', 'Steer with 2 4 6 8 (W A D X).'],
+  pong:   ['Pong', 'Paddle: 2 up, 8 down (W / X).'],
 };
 const ORDER = ['bounce', 'maze', 'snake', 'pong'];
 
@@ -50,5 +50,5 @@ for (const [id, rom] of Object.entries(roms)) {
 }
 
 const kb = (Buffer.byteLength(html) / 1024).toFixed(1);
-console.log(`dist/studio.html  ${kb} kB  (${Object.keys(roms).length} ROM-ow wbudowanych)`);
+console.log(`dist/studio.html  ${kb} kB  (${Object.keys(roms).length} ROMs built in)`);
 for (const [id, rom] of Object.entries(roms)) console.log(`dist/${id}.ch8`.padEnd(22) + `${rom.size} B`);

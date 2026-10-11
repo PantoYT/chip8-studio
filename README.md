@@ -37,7 +37,7 @@ That's it. Which is why a quite playable snake fits in **385 bytes**.
 Interpreters were written by different people for different machines, and a few
 instructions drifted apart between versions. There's no single "correct" CHIP-8 — there
 is the original COSMAC VIP, SUPER-CHIP from the HP-48 calculators, and newer ports. The
-Studio has them as toggles (`Quirki interpretera` — interpreter quirks), because that's
+Studio has them as toggles (`Interpreter quirks`), because that's
 the only way to make old ROMs from the internet run correctly:
 
 - **`8XY1/2/3` reset `VF`** — the original did, later ports don't.
@@ -48,7 +48,7 @@ the only way to make old ROMs from the internet run correctly:
 - **`8XY6/8XYE`** shift `VY` (original) or `VX` in place (SUPER-CHIP).
 - **`BNNN`** jumps from `V0` (original) or from `VX` (SUPER-CHIP).
 
-The `COSMAC VIP` profile sets everything the old way, `Nowoczesny` (modern) the new way.
+The `COSMAC VIP` profile sets everything the old way, `Modern` the new way.
 
 ---
 
@@ -68,14 +68,13 @@ tests/run.js      tests
 ## Studio
 
 - a screen with phosphor glow (four colors) and CRT lines,
-- **a time-travel debugger** — `Cofnij` (undo) restores the full state from before an
+- **a time-travel debugger** — `Back` restores the full state from before an
   instruction (registers, memory, screen); the buffer holds 4096 steps,
 - breakpoints: click a line in the disassembler,
 - a memory view with `PC` and `I` highlighted,
 - a source editor — `Ctrl+Enter` assembles and runs, errors show the line number,
-- `Pobierz .ch8` (download) saves a file that runs in **any** CHIP-8 emulator.
+- `Download .ch8` saves a file that runs in **any** CHIP-8 emulator.
 
-The interface labels are in Polish.
 
 ## Assembly language
 

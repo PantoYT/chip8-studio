@@ -1,36 +1,36 @@
 ; ============================================================
-;  WAZ  (snake)
+;  SNAKE
 ;
-;  Plansza: 16 x 8 komorek po 4 x 4 piksele.
-;  Komorka pakowana w jeden bajt:  (kolumna << 4) | wiersz
-;  Cialo weza to bufor cykliczny 64 bajtow pod adresem BODY.
+;  Board: 16 x 8 cells of 4 x 4 pixels.
+;  A cell packed into one byte:  (column << 4) | row
+;  The snake's body is a 64-byte ring buffer at address BODY.
 ;
-;  Sterowanie:  2 = gora   8 = dol   4 = lewo   6 = prawo
+;  Controls:  2 = up   8 = down   4 = left   6 = right
 ;
-;  Rejestry:
-;    V0, V1 - pomocnicze          V8 - licznik petli skanujacej
-;    V2 - kolumna glowy           V9 - spakowana komorka
-;    V3 - wiersz glowy            VA - wynik
-;    V4 - kierunek (0..3)         VB - blokada skretu / flaga wzrostu
-;    V5 - indeks glowy w buforze  VC - wynik skanowania
-;    V6 - indeks ogona            VD, VE - wspolrzedne w pikselach
-;    V7 - spakowana pozycja jedzenia
+;  Registers:
+;    V0, V1 - scratch             V8 - scan loop counter
+;    V2 - head column             V9 - packed cell
+;    V3 - head row                VA - score
+;    V4 - direction (0..3)        VB - turn lock / grow flag
+;    V5 - head index in buffer    VC - scan result
+;    V6 - tail index              VD, VE - pixel coordinates
+;    V7 - packed food position
 ; ============================================================
 
-define BODY   0x400         ; bufor cykliczny 64 bajtow
-define RING   63            ; maska bufora
-define SPEED  3             ; opoznienie miedzy krokami (klatki)
-define MAXLEN 39            ; powyzej tego waz przestaje rosnac
+define BODY   0x400         ; 64-byte ring buffer
+define RING   63            ; buffer mask
+define SPEED  3             ; delay between steps (frames)
+define MAXLEN 39            ; past this the snake stops growing
 
-; ---------------------------------------------------------------- start gry
+; ---------------------------------------------------------------- game start
 main:
     CLS
-    LD  V4, 1               ; kierunek startowy: w prawo
-    LD  VA, 0               ; wynik
-    LD  V5, 0               ; indeks glowy
-    LD  V6, 0               ; indeks ogona
-    LD  V3, 4               ; wiersz
-    LD  V2, 2               ; kolumna - waz startuje jako trzy komorki
+    LD  V4, 1               ; start direction: right
+    LD  VA, 0               ; score
+    LD  V5, 0               ; head index
+    LD  V6, 0               ; tail index
+    LD  V3, 4               ; row
+    LD  V2, 2               ; column - the snake starts as three cells
 
 initbody:
     CALL pack
@@ -49,19 +49,19 @@ initstep:
 initdone:
     CALL newfood
 
-; ---------------------------------------------------------------- petla gry
+; ---------------------------------------------------------------- game loop
 loop:
-    ; --- przesun glowe zgodnie z kierunkiem
+    ; --- move the head in the current direction
     SNE V4, 0
-    ADD V3, -1              ; gora
+    ADD V3, -1              ; up
     SNE V4, 1
-    ADD V2, 1               ; prawo
+    ADD V2, 1               ; right
     SNE V4, 2
-    ADD V3, 1               ; dol
+    ADD V3, 1               ; down
     SNE V4, 3
-    ADD V2, -1              ; lewo
+    ADD V2, -1              ; left
 
-    ; --- sciana?  (po odjeciu 1 od zera zostaje 255, wiec SUB zlapie oba przypadki)
+    ; --- a wall?  (1 taken from zero leaves 255, so SUB catches both sides)
     LD  V0, 15
     SUB V0, V2
     SE  VF, 1
@@ -71,18 +71,18 @@ loop:
     SE  VF, 1
     JP  dead
 
-    ; --- wlasny ogon?
+    ; --- its own tail?
     CALL pack
     CALL occupied
     SE  VC, 0
     JP  dead
 
-    ; --- jedzenie?
+    ; --- food?
     LD  VB, 0
     SNE V9, V7
     CALL eat
 
-    ; --- dopisz nowa glowe do bufora i narysuj ja
+    ; --- add the new head to the buffer and draw it
     ADD V5, 1
     LD  V0, RING
     AND V5, V0
@@ -92,26 +92,26 @@ loop:
     LD  [I], V0
     CALL drawbody
 
-    ; --- jesli nie rosniemy, zdejmij ogon
+    ; --- not growing: remove the tail
     SE  VB, 0
     JP  skiptail
     LD  I, BODY
     ADD I, V6
     LD  V0, [I]
-    CALL drawbody           ; ten sam sprite w to samo miejsce = wymazanie
+    CALL drawbody           ; the same sprite on the same spot = erased
     ADD V6, 1
     LD  V0, RING
     AND V6, V0
 skiptail:
 
-    ; --- nowe jedzenie dopiero po zdjeciu ogona, zeby nie trafilo na zajete pole
+    ; --- new food only after the tail is gone, so it can't land on a taken cell
     SE  VB, 1
     JP  nofood
     CALL newfood
 nofood:
 
-    ; --- pauza; w tym czasie nasluchujemy klawiszy
-    LD  VB, 0               ; jeden skret na krok
+    ; --- pause; keys are read meanwhile
+    LD  VB, 0               ; one turn per step
     LD  V0, SPEED
     LD  DT, V0
 wait:
@@ -121,22 +121,22 @@ wait:
     JP  wait
     JP  loop
 
-; ---------------------------------------------------------------- jedzenie
+; ---------------------------------------------------------------- food
 eat:
     LD  VB, 1
     LD  V0, V7
-    CALL drawfood           ; wymaz zjedzone
+    CALL drawfood           ; erase what was eaten
     ADD VA, 1
     LD  V0, 4
     LD  ST, V0
     LD  V0, MAXLEN
     SUB V0, VA
     SE  VF, 1
-    LD  VB, 0               ; osiagnieta maksymalna dlugosc - rosnij dalej wynikiem
+    LD  VB, 0               ; maximum length reached - only the score grows
     RET
 
 newfood:
-    RND V9, 0xF7            ; kolumna 0-15 w gornym nibblu, wiersz 0-7 w dolnym
+    RND V9, 0xF7            ; column 0-15 in the high nibble, row 0-7 in the low
     CALL occupied
     SE  VC, 0
     JP  newfood
@@ -145,9 +145,9 @@ newfood:
     CALL drawfood
     RET
 
-; ---------------------------------------------------------------- sterowanie
+; ---------------------------------------------------------------- controls
 input:
-    SE  VB, 0               ; juz skrecalismy w tym kroku?
+    SE  VB, 0               ; already turned this step?
     RET
     LD  V0, 2
     SKNP V0
@@ -164,7 +164,7 @@ input:
     RET
 
 turnup:
-    SNE V4, 2               ; zawrot o 180 stopni jest ignorowany
+    SNE V4, 2               ; a 180 degree turn is ignored
     RET
     LD  V4, 0
     LD  VB, 1
@@ -188,8 +188,8 @@ turnleft:
     LD  VB, 1
     RET
 
-; ---------------------------------------------------------------- narzedzia
-; V2, V3  ->  V9 = (kolumna << 4) | wiersz
+; ---------------------------------------------------------------- helpers
+; V2, V3  ->  V9 = (column << 4) | row
 pack:
     LD  V9, V2
     SHL V9
@@ -199,7 +199,7 @@ pack:
     OR  V9, V3
     RET
 
-; V0 = spakowana komorka  ->  VD, VE = lewy gorny rog w pikselach
+; V0 = packed cell  ->  VD, VE = top left corner in pixels
 topixel:
     LD  VD, V0
     SHR VD
@@ -207,12 +207,12 @@ topixel:
     SHR VD
     SHR VD
     SHL VD
-    SHL VD                  ; kolumna * 4
+    SHL VD                  ; column * 4
     LD  VE, V0
     LD  V1, 15
     AND VE, V1
     SHL VE
-    SHL VE                  ; wiersz * 4
+    SHL VE                  ; row * 4
     RET
 
 drawbody:
@@ -227,17 +227,17 @@ drawfood:
     DRW VD, VE, 3
     RET
 
-; V9 = szukana komorka  ->  VC = 1 jesli lezy na niej waz
+; V9 = the cell to find  ->  VC = 1 if the snake is on it
 occupied:
     LD  VC, 0
-    LD  V8, V6              ; od ogona...
+    LD  V8, V6              ; from the tail...
 scanloop:
     LD  I, BODY
     ADD I, V8
     LD  V0, [I]
     SNE V0, V9
     LD  VC, 1
-    SE  V8, V5              ; ...do glowy wlacznie
+    SE  V8, V5              ; ...to the head, inclusive
     JP  scannext
     RET
 scannext:
@@ -246,7 +246,7 @@ scannext:
     AND V8, V1
     JP  scanloop
 
-; ---------------------------------------------------------------- koniec gry
+; ---------------------------------------------------------------- game over
 dead:
     LD  V0, 16
     LD  ST, V0
@@ -261,7 +261,7 @@ deadwait:
     LD  I, scorebuf
     LD  B, VA
     LD  I, scorebuf
-    LD  V2, [I]             ; V0 = setki, V1 = dziesiatki, V2 = jednosci
+    LD  V2, [I]             ; V0 = hundreds, V1 = tens, V2 = ones
     LD  VD, 26
     LD  VE, 13
     LD  F, V1
@@ -270,10 +270,10 @@ deadwait:
     LD  F, V2
     DRW VD, VE, 5
 
-    LD  V0, K               ; dowolny klawisz zaczyna od nowa
+    LD  V0, K               ; any key starts over
     JP  main
 
-; ---------------------------------------------------------------- dane
+; ---------------------------------------------------------------- data
 sprbody:
     gfx ###.....
     gfx ###.....

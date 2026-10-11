@@ -1,68 +1,68 @@
 ; ============================================================
-;  ODBIJAK  (pong na jedna paletke)
+;  PONG  (for one paddle)
 ;
-;  Pilka odbija sie od trzech scian, czwarta trzeba zaslonic paletka.
-;  Trzy zycia, potem ekran z wynikiem i dowolny klawisz restartuje.
+;  The ball bounces off three walls; the fourth has to be covered by the paddle.
+;  Three lives, then a score screen, and any key restarts.
 ;
-;  Sterowanie:  2 = paletka w gore   8 = paletka w dol
+;  Controls:  2 = paddle up   8 = paddle down
 ;
-;  Rejestry:
-;    V0 - pomocniczy        V6 - pozycja paletki (y)
-;    V1 - blokada ruchu     V8 - wynik
-;    V2 - pilka x           V9 - zycia
-;    V3 - pilka y           VA - flaga "nie zdazyl"
-;    V4 - dx (2 / 254)      VD, VE - pomocnicze przy rysowaniu
+;  Registers:
+;    V0 - scratch           V6 - paddle position (y)
+;    V1 - move lock         V8 - score
+;    V2 - ball x            V9 - lives
+;    V3 - ball y            VA - "missed it" flag
+;    V4 - dx (2 / 254)      VD, VE - drawing scratch
 ;    V5 - dy (1 / 255)
 ; ============================================================
 
-define PADX   62            ; paletka to jedna kolumna pikseli
+define PADX   62            ; the paddle is one column of pixels
 define PADTOP 0
 define PADBOT 24
 define LIVES  3
 
 main:
     CLS
-    LD  V8, 0               ; wynik
+    LD  V8, 0               ; score
     LD  V9, LIVES
-    LD  V6, 12              ; paletka na srodku
+    LD  V6, 12              ; paddle in the middle
     CALL drawpad
 
 newball:
     LD  VA, 0
     LD  V2, 8
     LD  V3, 8
-    LD  V4, 2               ; pilka leci w prawo...
-    LD  V5, 1               ; ...i w dol
+    LD  V4, 2               ; the ball goes right...
+    LD  V5, 1               ; ...and down
     LD  I, sprball
     DRW V2, V3, 2
 
 loop:
     LD  I, sprball
-    DRW V2, V3, 2           ; wymaz pilke
+    DRW V2, V3, 2           ; erase the ball
 
     ADD V2, V4
     ADD V3, V5
 
-    SNE V3, 31              ; sufit / podloga
+    SNE V3, 31              ; ceiling / floor
     CALL flipy
     SNE V3, 255
     CALL flipy
 
-    SNE V2, 254             ; lewa sciana
+    SNE V2, 254             ; left wall
     CALL flipx
 
-    SNE V2, 60              ; plaszczyzna paletki
+    SNE V2, 60              ; the paddle's plane
     CALL paddle
 
     LD  I, sprball
-    DRW V2, V3, 2           ; narysuj pilke w nowym miejscu
+    DRW V2, V3, 2           ; draw the ball at the new spot
 
     SE  VA, 1
     JP  tick
     JP  missed
 
 tick:
-    LD  V1, 0               ; jeden ruch paletki na krok
+    LD  V1, 0               ; one paddle move per step
     LD  V0, 1
     LD  DT, V0
 twait:
@@ -72,12 +72,12 @@ twait:
     JP  twait
     JP  loop
 
-; ---------------------------------------------------------------- fizyka
+; ---------------------------------------------------------------- physics
 flipy:
     LD  V0, 0
     SUB V0, V5
     LD  V5, V0
-    ADD V3, V5              ; cofnij o krok, juz w nowa strone
+    ADD V3, V5              ; step back, already the new way
     RET
 
 flipx:
@@ -87,7 +87,7 @@ flipx:
     ADD V2, V4
     RET
 
-; trafienie, gdy  y+1 >= paletka  oraz  y <= paletka+7
+; a hit when  y+1 >= paddle  and  y <= paddle+7
 paddle:
     LD  V0, V3
     ADD V0, 1
@@ -114,7 +114,7 @@ toolow:
     LD  VA, 1
     RET
 
-; ---------------------------------------------------------------- sterowanie
+; ---------------------------------------------------------------- controls
 input:
     SE  V1, 0
     RET
@@ -128,7 +128,7 @@ input:
 padup:
     SNE V6, PADTOP
     RET
-    CALL drawpad            ; wymaz w starym miejscu
+    CALL drawpad            ; erase at the old spot
     ADD V6, -2
     CALL drawpad
     LD  V1, 1
@@ -148,7 +148,7 @@ drawpad:
     DRW V0, V6, 8
     RET
 
-; ---------------------------------------------------------------- stracone zycie
+; ---------------------------------------------------------------- a life lost
 missed:
     LD  V0, 12
     LD  ST, V0
@@ -173,7 +173,7 @@ gameover:
     LD  I, scorebuf
     LD  B, V8
     LD  I, scorebuf
-    LD  V2, [I]             ; V0 = setki, V1 = dziesiatki, V2 = jednosci
+    LD  V2, [I]             ; V0 = hundreds, V1 = tens, V2 = ones
     LD  VD, 26
     LD  VE, 13
     LD  F, V1
@@ -184,7 +184,7 @@ gameover:
     LD  V0, K
     JP  main
 
-; ---------------------------------------------------------------- dane
+; ---------------------------------------------------------------- data
 sprball:
     gfx ##......
     gfx ##......

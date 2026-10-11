@@ -1,36 +1,36 @@
 ; ============================================================
-;  ODBIJAJACA PILKA  -  najmniejszy sensowny program CHIP-8
-;  Pilka lata po ekranie i piszczy przy kazdym odbiciu.
+;  BOUNCING BALL  -  the smallest sensible CHIP-8 program
+;  A ball flies around the screen and beeps at every bounce.
 ;
-;  Rejestry:  V0 = x   V1 = y   V2 = dx   V3 = dy   V4 = pomocniczy
+;  Registers:  V0 = x   V1 = y   V2 = dx   V3 = dy   V4 = scratch
 ; ============================================================
 
-    LD  V0, 20          ; pozycja startowa
+    LD  V0, 20          ; start position
     LD  V1, 8
-    LD  V2, 1           ; kierunek: 1 = w prawo, 255 = w lewo
-    LD  V3, 1           ; kierunek: 1 = w dol,   255 = w gore
+    LD  V2, 1           ; direction: 1 = right, 255 = left
+    LD  V3, 1           ; direction: 1 = down,  255 = up
     LD  I, ball
-    DRW V0, V1, 4       ; pierwsze rysowanie - bez tego petla wymazywalaby
-                        ; pustke i zostawila duszka na pozycji startowej
+    DRW V0, V1, 4       ; first draw - without it the loop would erase
+                        ; nothing and leave a ghost at the start position
 
 loop:
-    DRW V0, V1, 4       ; XOR w to samo miejsce = wymazanie pilki
+    DRW V0, V1, 4       ; XOR onto the same spot = the ball is erased
 
-    ADD V0, V2          ; ruch w poziomie
-    SNE V0, 61          ; dojechala do prawej krawedzi?
+    ADD V0, V2          ; horizontal move
+    SNE V0, 61          ; reached the right edge?
     CALL bounceX
-    SNE V0, 255         ; ...albo do lewej (0 - 1 = 255)
+    SNE V0, 255         ; ...or the left one (0 - 1 = 255)
     CALL bounceX
 
-    ADD V1, V3          ; ruch w pionie
+    ADD V1, V3          ; vertical move
     SNE V1, 29
     CALL bounceY
     SNE V1, 255
     CALL bounceY
 
-    DRW V0, V1, 4       ; rysowanie w nowym miejscu
+    DRW V0, V1, 4       ; draw at the new spot
 
-    LD  V4, 1           ; krotka pauza, zeby dalo sie to ogladac
+    LD  V4, 1           ; a short pause, so it can be watched
     LD  DT, V4
 wait:
     LD  V4, DT
@@ -38,7 +38,7 @@ wait:
     JP  wait
     JP  loop
 
-; --- odbicie: odwroc znak predkosci i cofnij o jeden krok --------------
+; --- bounce: flip the velocity's sign and step back once --------------
 bounceX:
     LD  V4, 0
     SUB V4, V2          ; V4 = -dx
@@ -58,7 +58,7 @@ beep:
     LD  ST, V4
     RET
 
-; --- grafika ----------------------------------------------------------
+; --- graphics ---------------------------------------------------------
 ball:
     gfx .##.....
     gfx ####....

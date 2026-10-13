@@ -1268,8 +1268,11 @@ function readQuirks() {
 function boot() {
   // Browsers restore <select> values across reloads, so pin the phosphor
   // explicitly instead of inheriting whatever was picked last time.
-  $('phos').value = 'amber';
-  document.documentElement.dataset.phos = 'amber';
+  // ?phos=amber (or ice, paper) picks another one, e.g. for a page that embeds the studio.
+  const asked = new URLSearchParams(location.search).get('phos');
+  const phos = [...$('phos').options].some((o) => o.value === asked) ? asked : 'green';
+  $('phos').value = phos;
+  document.documentElement.dataset.phos = phos;
   RGB = phosColor();
 
   // quirk checkboxes

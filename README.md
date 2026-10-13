@@ -67,7 +67,8 @@ tests/run.js      tests
 
 ## Studio
 
-- a screen with phosphor glow (four colors) and CRT lines,
+- a screen with phosphor glow (four colors, green by default; `?phos=amber`, `ice` or
+  `paper` in the address picks another) and CRT lines,
 - **a time-travel debugger** — `Back` restores the full state from before an
   instruction (registers, memory, screen); the buffer holds 4096 steps,
 - breakpoints: click a line in the disassembler,
